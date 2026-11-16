@@ -23,6 +23,16 @@ class Settings(BaseSettings):
     login_account_rate_limit: int = Field(default=5, ge=1, le=1000)
     login_rate_window_seconds: int = Field(default=900, ge=1, le=86400)
     upload_dir: Path = Path(__file__).resolve().parents[2] / "uploads"
+    trusted_proxy_ips: list[str] = Field(default_factory=list)
+
+    @field_validator("trusted_proxy_ips")
+    @classmethod
+    def validate_proxy_ips(cls, values: list[str]) -> list[str]:
+        networks = [ipaddress.ip_network(value, strict=False) for value in values]
+        if any(network.prefixlen == 0 for network in networks):
+            raise ValueError("Trust only specific proxy addresses or private deployment networks.")
+        return [str(network) for network in networks]
+
     auth_allowed_origins: list[str] = Field(
         default_factory=lambda: [
             "http://127.0.0.1:5173",

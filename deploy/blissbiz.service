@@ -1,0 +1,22 @@
+[Unit]
+Description=BlissBiz FastAPI backend
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=blissbiz
+Group=blissbiz
+WorkingDirectory=/opt/blissbiz/current/backend
+EnvironmentFile=/etc/blissbiz/backend.env
+ExecStart=/opt/blissbiz/current/backend/.venv/bin/python3 -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 2 --no-proxy-headers --no-server-header
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/blissbiz/uploads
+
+[Install]
+WantedBy=multi-user.target

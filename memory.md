@@ -45,3 +45,21 @@ Root cause: Filesystem writes and SQL transactions do not share an atomic commit
 Fix: Decode/re-encode into a new generated path, update/commit the DB reference, then remove old files only after checking all references and business path scope. After rollback, check references before removing new files. Keep files if DB state is unavailable. Bound upload bytes before multipart parsing and validate safe paths/symlinks. Post-commit cleanup failures log generically; crash/orphan reconciliation is B09 work.
 Verification: Tests cover rollback, uncertain commit acknowledgement, shared references, partial writes/name collisions, symlinks, malformed/oversized images, orientation and transparency; 403 SQLite/MySQL tests and a real-app upload/serve/delete flow passed.
 Reuse hint: Preserve UPLOAD_DIR across deployments and back it up with MySQL; production requires an absolute root outside the checkout.
+
+B09 follow-up: `python3 -m app.maintenance` now previews expired security rows and old orphan files; `--apply` performs removals with fresh per-candidate transactions and the same business lock as uploads. Default grace is 24 hours. Backup/restore is tested with writes paused and paired SQL/image checksums. Optional service/timer files are prepared but never installed by local setup.
+
+## [2026-11-16] Process trusted proxy headers exactly once
+Context: BlissBiz B07–B09, Nginx and Uvicorn.
+Signal: Production HTTPS, client-IP quotas and storefront Host resolution must agree without accepting spoofed forwarding headers.
+Root cause: Uvicorn can preprocess forwarded headers before application middleware, undermining a narrower application trust list if both policies run. Forwarded Host must not select a tenant.
+Fix: Launch Uvicorn with --no-proxy-headers; configure the existing Uvicorn ProxyHeadersMiddleware in the app with explicit validated TRUSTED_PROXY_IPS (empty by default). Nginx overwrites client IP/protocol and preserves actual Host; storefront queries validate one slug under the configured base domain. An older development server must be restarted with make dev-backend to adopt the launch flag.
+Verification: 474 SQLite/MySQL tests and isolated verified-HTTPS Nginx/two-worker checks passed, including two-tenant isolation and quotas despite spoofed forwarded headers.
+Reuse hint: Never trust wildcard proxy ranges or X-Forwarded-Host; keep port 8000 private and compare the full proxy chain when debugging origin/CSRF or client-IP issues.
+
+## [2026-11-16] Use a verified image mirror when Docker Hub CDN trust fails
+Context: BlissBiz local disposable deployment verification on this Mac.
+Signal: Docker Hub image pulls failed x509 certificate verification for production.cloudfront.docker.com, including a scoped elevated retry.
+Root cause: Docker's download path could not validate that CDN's certificate chain; the underlying host/network trust cause was not established.
+Fix: Pull the same official Python/Nginx images from Google's documented mirror.gcr.io cache and set TEST_PYTHON_IMAGE / TEST_NGINX_IMAGE for the disposable deployment test. Certificate verification remains enabled. Docker build-cache writes on this host required scoped escalation; no daemon restart or trust-store change was made.
+Verification: The isolated stack built and passed HTTPS/routing/security checks, restart persistence and paired MySQL/image backup + restore. Its generated project/volumes were removed and the normal MySQL container stayed healthy.
+Reuse hint: See deploy/README.md for the image override invocation. Wait briefly for the published HTTPS port after Compose reports Running; do not treat that container status alone as external readiness.

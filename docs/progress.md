@@ -25,9 +25,9 @@ Code completion, user acceptance, and merging are separate facts. Record merge r
 | B05a | Product create/list/detail | review | Codex; `codex/b04-b06-catalog-images`, uncommitted | Migration 0004 applied; exact decimal prices, draft defaults, search/pagination and tenant boundaries pass. |
 | B05b | Product edit/delete/publication | review | Codex; `codex/b04-b06-catalog-images`, uncommitted | Partial updates, publish/unpublish, deletion, rollback and image cleanup checks pass. |
 | B06 | Logo and product images | review | Codex; `codex/b04-b06-catalog-images`, uncommitted | Validated uploads, persistent root configuration, public media and transaction-aware cleanup pass; combined MySQL suite 403 tests. |
-| B07 | Host resolution and public business profile | planned | Unassigned | B04. |
-| B08 | Public product catalog | planned | Unassigned | B05b, B07. |
-| B09 | Backend integration and deployment preparation | planned | Unassigned | B06, B08. |
+| B07 | Host resolution and public business profile | review | Codex; `codex/b07-b09-storefront-deploy`, uncommitted | Strict Host resolution and public-only profile; malformed/unknown/forwarded-host cases pass. |
+| B08 | Public product catalog | review | Codex; `codex/b07-b09-storefront-deploy`, uncommitted | Published-only, tenant-scoped list/detail/search/pagination; draft, deleted and cross-business IDs return 404. |
+| B09 | Backend integration and deployment preparation | review | Codex; `codex/b07-b09-storefront-deploy`, uncommitted | 474 SQLite/MySQL tests; isolated verified-HTTPS Nginx/two-worker integration, restart persistence and backup/restore passed. No production deployment. |
 | F01 | Landing page and CTA | planned | Unassigned | After F00 acceptance and authorization. |
 | F02 | Shared client and session handling | planned | Unassigned | F00, B01. |
 | F03 | Registration form and success page | planned | Unassigned | F01, F02, B02. |
@@ -46,11 +46,11 @@ Resolve each when its task is claimed; none blocks reviewing the existing implem
 | Decision | Resolve before |
 | --- | --- |
 | B01 defines 15-minute anonymous/8-hour owner sessions, rotation, exact admin origins, and secure production cookies; review [the contract](session-security.md) | B01 acceptance |
-| SQL-backed fixed-window limits: registration 5 per peer; login 20 per peer and 5 per normalized account, each per 900 seconds by default. See [API configuration](api.md#basic-authentication-requests). | Review defaults before production; proxy handling remains B09. |
+| SQL-backed fixed-window limits: registration 5 per peer; login 20 per peer and 5 per normalized account, each per 900 seconds by default. See [API configuration](api.md#basic-authentication-requests). | Review limits and actual proxy addresses before production; B09 handling is implemented. |
 | Frontend component library, if any; otherwise continue with existing CSS | F01 implementation |
 | Frontend lint/format and automated UI testing tools | Adding those checks; discuss dependencies first |
-| Confirm central admin hostname and verify local subdomain routing on each OS | F01 navigation/B01 origin integration, finalized by B07 |
-| B06 uses local backend/uploads or production UPLOAD_DIR outside deployments; Pillow validates/re-encodes; cleanup checks references after commit. Crash/orphan reconciliation remains B09. | Production maintenance/backup setup before deployment |
+| Central admin and slug-based API host routing are implemented; confirm the real production domain and verify local DNS on each OS | F01 navigation/B01 origin integration, finalized by B07 |
+| Persistent storage and validation are implemented; B09 adds dry-run/apply expired-security/orphan cleanup and optional service/timer examples. Nothing schedules local deletion automatically. | Production maintenance/backup setup before deployment |
 | Exact GoDaddy product, production domain, DNS/HTTPS, proxy, and backup setup | B09 preparation; deployment requires separate authorization |
 
 ## Handoff template
@@ -80,7 +80,7 @@ Next eligible task (requires authorization):
 
 ## Current checkpoint
 
-Implementation is paused for joint review through B06, as requested. Owner business settings, product CRUD/search/publication, logo/product image uploads and public media serving now join registration/authentication. B07/B08 host-based storefront APIs and frontend business screens remain planned. Local migration head is 0004; no deployment was performed. Earlier review statuses are preserved; later implementation requires a user request.
+Implementation is paused for review through B09, as requested. Backend storefront profile/published-product APIs, explicit proxy trust, maintenance and deployment/backup preparation are implemented and locally verified. Business frontend screens remain planned. Schema head remains 0004; no production deployment, service installation or offsite backup configuration was performed. Earlier review statuses remain unchanged; further implementation requires a user request.
 
 ## B01 handoff
 
@@ -144,3 +144,19 @@ Historical B01 checkpoint; the B02 handoff below describes the current implement
 - Known limits: post-commit cleanup failures log a generic warning and leave an unused file; retry/reconciliation after disk failure or process crash is B09 work. Previously fetched public images may remain in browser caches for up to one hour. Public storefront/catalog pages are still unimplemented.
 - Usage: docs/api.md contains business/product JSON bodies, list/filter examples and multipart file-field instructions; /api/docs exposes the implemented routes. For a new contributor: make setup, make db-migrate, then start their own backend terminal.
 - Acceptance/merge: pending user review; no commit, PR, merge or deployment created. Next backend slice is B07 only after authorization.
+
+
+## B07–B09 handoff
+
+- Status/reference: review; Codex, `codex/b07-b09-storefront-deploy`, uncommitted after `66bd5c5`. User authorized implementation through B09. Earlier acceptance statuses are preserved.
+- Owned scope: storefront schemas/service/routes; published-product and slug repository queries; proxy settings/application factory; maintenance repository/service/CLI and focused tests; Nginx/systemd/environment examples, optional backend Dockerfile and disposable integration Compose stack; backup and deployment-test scripts; Vite hostname access, Make targets and basic API/setup/deployment documentation. No new framework/dependency or schema migration.
+- B07/B08 behavior: actual Host selects one validated slug directly beneath the configured base domain; unknown/malformed/reserved/nested names return 404. Forwarded host/tenant headers cannot select a business. Public profiles and product schemas expose explicit public fields only. Product lists/detail enforce published status and business ID in SQL; search/pagination retain existing limits and decimal-string formatting. Responses are not shared-cached; public GETs need no session/CSRF. Vue storefront screens remain unimplemented.
+- Proxy/production behavior: default TRUSTED_PROXY_IPS is empty; explicit validated IP/networks only. Uvicorn's application middleware performs one trusted proxy pass; launch commands disable the server's implicit proxy processing. Nginx overwrites forwarded client/protocol headers, preserves Host, proxies API/media and serves the Vue build with deep-link fallback. Production Swagger/OpenAPI routes are disabled. Restart an older local backend using make dev-backend to adopt the new launch flag.
+- Maintenance: dry-run by default; --apply removes expired sessions/counters and generated, unreferenced image files older than the grace period (default 24 hours). A fresh transaction and the upload business lock precede each reference recheck. Recent/referenced/unknown files and symlinks are preserved; removal errors are counted. The optional daily timer is a configuration artifact, not installed/enabled.
+- Backup: scripts/backup.sh requires explicit --writes-paused and new private destination outside uploads; dumps the Compose database, archives images and writes checksums. Pause writes/maintenance yourself; the script never stops the current application. Copy completed backups off the VM. No production backup destination/scheduler was configured.
+- Verification: make check passed (254 tests, one expected opt-in skip, lint/format including the deployment script, Vue build); make test-mysql passed (474 tests). Alembic check has no drift; head remains 0004. The local maintenance preview succeeded with apply=false. Existing TestClient deprecation warning remains.
+- Deployment integration: isolated Nginx + two Uvicorn workers + fresh MySQL, using verified local TLS, passed config validation, frontend deep links, secure host-only cookies, registration, two businesses with owner/public isolation, draft/published transitions, image serving, logout/login and shared quotas despite spoofed forwarding. Media persisted across a backend restart. With this test backend stopped, the backup script created checksummed SQL/images; both restored into a new disposable database/folder with expected rows/images. Only generated test-project containers/volumes were removed; the normal blissbiz MySQL stayed healthy and the user's backend process was untouched.
+- Local environment finding: Docker Hub's CloudFront certificate chain was rejected even outside the sandbox. Verified Google Docker Hub mirror images worked via test-only image overrides; no TLS verification, daemon trust store or global runtime setting was changed. Docker build metadata required scoped escalation on this Mac.
+- Limits/external verification: real GoDaddy domain/DNS, public certificate issuance/renewal, firewall and systemd installation, off-VM backup delivery and final host-specific paths still require the intended VPS and deployment authorization. ARM64 local container verification does not certify the eventual server environment.
+- Usage: docs/api.md has public GET/curl examples; deploy/README.md documents configuration, maintenance, backups/recovery and the reproducible make test-deployment check. No separate verification document was created.
+- Acceptance/merge: pending; no commit, PR, merge or production deployment created. Frontend remains its development starter; choose a frontend slice only on user request.

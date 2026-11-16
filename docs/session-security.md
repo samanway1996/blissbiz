@@ -55,6 +55,7 @@ Production example (replace the example domain):
 ```dotenv
 APP_ENV=production
 UPLOAD_DIR=/var/lib/blissbiz/uploads
+TRUSTED_PROXY_IPS=["127.0.0.1/32","::1/128"]
 AUTH_ALLOWED_ORIGINS=["https://admin.example.com"]
 STOREFRONT_BASE_URL=https://example.com
 ADMIN_BASE_URL=https://admin.example.com

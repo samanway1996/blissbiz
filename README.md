@@ -1,8 +1,10 @@
 # BlissBiz
 
-Small-business website platform built with Vue 3 + Vite, FastAPI, and MySQL. The backend supports registration, login/logout, owner business settings, product CRUD/publication, and logo/product image uploads. Host-based storefront APIs and business frontend screens remain planned.
+Small-business website platform built with Vue 3 + Vite, FastAPI, and MySQL. Backend APIs through B09 support registration, login/logout, owner settings, product CRUD/publication, image uploads, and hostname-based public storefronts. Business frontend screens remain planned.
 
-The planned registration, owner dashboard, and storefront endpoints are documented in [the API plan](docs/api.md).
+Registration, owner dashboard, and storefront endpoints are documented in [the API plan](docs/api.md).
+
+Public storefront GET examples are in [the API document](docs/api.md#end-customer-website). [Deployment preparation](deploy/README.md) covers production settings, Nginx/service files, persistent storage, maintenance and backups. `make test-deployment` runs an isolated local HTTPS/Nginx/MySQL check; `make maintenance-preview` reports expired security records and orphan images without deleting anything. No production deployment is performed by setup or tests.
 
 For coordinated development across contributors and chats, follow [the implementation workflow](docs/implementation-workflow.md) and claim/update work in [the progress tracker](docs/progress.md).
 
@@ -83,7 +85,7 @@ Database models inherit from `app.db.session.Base`; import model modules in `bac
 
 B04–B06 add business settings, product CRUD/search/publication and image APIs; migration `0004` creates products. Run `make setup` to install the updated locked dependencies (Pillow and python-multipart), then `make db-migrate`. [Basic request bodies](docs/api.md#basic-businessproduct-requests) and [upload fields](docs/api.md#image-uploads) are in the API document and `/api/docs`.
 
-Image storage defaults to ignored `backend/uploads`, resolved from the backend project location. To choose another location, set an absolute `UPLOAD_DIR` in `backend/.env`. Production requires a directory outside this checkout/deployment folder, such as `/var/lib/blissbiz/uploads`, writable by the backend service. Keep it across releases and back it up alongside MySQL. Only image paths are stored in MySQL; restoring the database alone does not restore pictures. FastAPI serves `/media` and Vite proxies it locally; production Nginx routing/backup operations remain B09 work. Never mount the whole upload root as executable web content.
+Image storage defaults to ignored `backend/uploads`, resolved from the backend project location. To choose another location, set an absolute `UPLOAD_DIR` in `backend/.env`. Production requires a directory outside this checkout/deployment folder, such as `/var/lib/blissbiz/uploads`, writable by the backend service. Keep it across releases and back it up alongside MySQL. Only image paths are stored in MySQL; restoring the database alone does not restore pictures. FastAPI serves `/media` and Vite proxies it locally; production Nginx routing and backup procedures are prepared under `deploy/`. Never mount the whole upload root as executable web content.
 
 For your IDE, select `backend/.venv/bin/python3` as the Python interpreter and `.tools/node/bin/node` as the Node interpreter on this Mac. Activating Python manually is optional; the Make commands already use the virtual environment.
 

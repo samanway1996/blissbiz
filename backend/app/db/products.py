@@ -18,6 +18,15 @@ class ProductRepository:
             statement = statement.with_for_update()
         return self.session.scalar(statement)
 
+    def find_published(self, business_id: str, product_id: str) -> Product | None:
+        return self.session.scalar(
+            select(Product).where(
+                Product.business_id == business_id,
+                Product.id == product_id,
+                Product.status == "published",
+            )
+        )
+
     def list(
         self, business_id: str, page: int, page_size: int, status: str | None, query: str | None
     ) -> tuple[list[Product], int]:

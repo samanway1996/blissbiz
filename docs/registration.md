@@ -51,7 +51,7 @@ Quota state lives in MySQL, in `rate_limit_buckets` (migration `0003`). An indep
 
 The application uses the ASGI network peer, not raw `X-Forwarded-For` headers. Production must configure trusted proxies correctly and prevent direct public access to the upstream port. Local requests through Vite may share the same peer/quota. Missing peer information shares a conservative `unknown` bucket. Keys include purpose, peer, and window and are hashed; raw IP addresses are not stored in this table.
 
-Counter operations use isolated MySQL/SQLite upsert implementations in `db/rate_limits.py`; uniqueness-error classification is isolated in `db/integrity.py`. Switching database engines requires adapting these helpers in addition to the documented migration/data-transfer checks. Cleanup scheduling for expired counters remains B09 work; expired windows cannot block a new window.
+Counter operations use isolated MySQL/SQLite upsert implementations in `db/rate_limits.py`; uniqueness-error classification is isolated in `db/integrity.py`. Switching database engines requires adapting these helpers in addition to the documented migration/data-transfer checks. B09 provides maintenance for expired counters and optional service/timer files; expired windows cannot block a new window.
 
 ## Configuration
 

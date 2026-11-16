@@ -1,6 +1,6 @@
 # BlissBiz API plan
 
-Contract for the hackathon MVP: register a business, manage its catalog through an owner dashboard, and display published products on a public storefront. B00–B06 implement slug availability, sessions, registration, authentication, owner business settings, product CRUD/publication and image uploads. `/api/health`, `/api/ready` and `/media/...` also exist. Host-based storefront APIs remain planned.
+Contract for the hackathon MVP: register a business, manage its catalog through an owner dashboard, and display published products on a public storefront. Backend APIs through B09 are implemented, including host-based storefronts and deployment preparation. `/api/health`, `/api/ready` and `/media/...` also exist. Business frontend screens remain separate work.
 
 ## Conventions
 
@@ -94,7 +94,7 @@ Login returns `200` with `{ "id": "owner-uuid", "full_name": "Asha", "email": "a
 
 Unknown email and wrong password both return `401 invalid_credentials`. Missing/mismatched CSRF or an untrusted origin returns `403`. Authentication responses are marked `Cache-Control: no-store`.
 
-Login uses independently committed database counters: by default 20 attempts per network peer and 5 per normalized email in a 900-second fixed window. Validated, CSRF-verified attempts count, including successful logins; counters are not reset by logout or failed transactions. `429` includes `Retry-After`. Limits are configured with `LOGIN_PEER_RATE_LIMIT`, `LOGIN_ACCOUNT_RATE_LIMIT`, and `LOGIN_RATE_WINDOW_SECONDS`. Changing networks does not bypass the account quota; exhausting it temporarily blocks that account until the next window. Forwarded client IPs are not read directly; trusted production proxy handling remains B09.
+Login uses independently committed database counters: by default 20 attempts per network peer and 5 per normalized email in a 900-second fixed window. Validated, CSRF-verified attempts count, including successful logins; counters are not reset by logout or failed transactions. `429` includes `Retry-After`. Limits are configured with `LOGIN_PEER_RATE_LIMIT`, `LOGIN_ACCOUNT_RATE_LIMIT`, and `LOGIN_RATE_WINDOW_SECONDS`. Changing networks does not bypass the account quota; exhausting it temporarily blocks that account until the next window. Rate limits use the request client identity after explicit trusted-proxy processing; Nginx overwrites client-supplied forwarding headers. See B09 deployment settings.
 
 Use a host-only HttpOnly session cookie, Secure in production and `SameSite=Lax`. Send `X-CSRF-Token` on all state-changing requests, including registration and login; obtain a fresh token after session rotation. Do not return session credentials in JSON or store them in browser local storage. Return a generic `401` for invalid login credentials and rate-limit authentication and registration.
 
@@ -172,11 +172,13 @@ Accept still JPEG, PNG and WebP up to 5 MiB per file and 20 megapixels. Content 
 
 Files use generated names under `UPLOAD_DIR/businesses/{business_id}/{random-name}.{jpg|png|webp}`. The default local root is ignored `backend/uploads`; production requires an absolute persistent root outside this checkout/deployment folder. MySQL stores relative paths only. Responses expose relative `/media/businesses/...` URLs; FastAPI serves validated, referenced files with `nosniff`, and Vite proxies `/media` locally. Public media needs no session, including for draft products. Removed/unreferenced paths return `404`; browser caches may retain previously fetched images for up to one hour. Private draft media is outside the MVP.
 
-Replacement writes a new generated file, commits its reference, then removes the old file only if no business/logo/product references it. Mutations lock business/product rows to serialize concurrent changes. Failed database writes roll back references and clean the new file if it is unreferenced; an uncertain commit never deletes a referenced new image. Disk/DB failure during post-commit cleanup leaves an unused file and logs a generic warning, while the completed operation succeeds. Cleanup retries/orphan reconciliation and scheduling after process crashes remain B09 operational work; no automatic deletion scan runs in B06.
+Replacement writes a new generated file, commits its reference, then removes the old file only if no business/logo/product references it. Mutations lock business/product rows to serialize concurrent changes. Failed database writes roll back references and clean the new file if it is unreferenced; an uncertain commit never deletes a referenced new image. Disk/DB failure during post-commit cleanup leaves an unused file and logs a generic warning, while the completed operation succeeds. B09 adds the dry-run/apply maintenance command and optional reviewed timer for expired security rows and old orphan files; nothing schedules deletion automatically in local setup.
 
 ## End customer website
 
 No login is needed. Resolve the business from the validated storefront hostname; do not accept an arbitrary tenant header from the browser. Unknown businesses return `404`. Public pages and their `/api` requests use the same storefront origin.
+
+B07/B08 implement all three endpoints below. The Host must be exactly `<slug>.<configured-base-domain>`, with an optional valid port. Nested, malformed, reserved and unknown names return `404`. Forwarded host/tenant headers cannot select a business. Public responses use `Cache-Control: no-store`; no owner cookie or CSRF header is needed.
 
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
@@ -184,11 +186,23 @@ No login is needed. Resolve the business from the validated storefront hostname;
 | GET | `/storefront/products` | List published products only; optional `q`, `page`, and `page_size`. |
 | GET | `/storefront/products/{product_id}` | Return a published product belonging to the resolved business; otherwise `404`. |
 
-Public product responses contain `id`, `name`, `description`, `price`, and `image_url`. Do not expose owner IDs, private account details, storage paths, or draft products. Scope reads and any caches to the resolved business. Local tenant hostname configuration will be added with storefront routing.
+Public product responses contain `id`, `name`, `description`, `price`, and `image_url`. Do not expose owner IDs, private account details, storage paths, or draft products. Scope reads and any caches to the resolved business. The configured storefront base domain controls tenant hostname resolution.
+
+Local GET examples for a registered business with slug `happy-bakery` (no request body):
+
+```sh
+curl --resolve happy-bakery.localhost:8000:127.0.0.1 http://happy-bakery.localhost:8000/api/v1/storefront
+curl --resolve happy-bakery.localhost:8000:127.0.0.1 'http://happy-bakery.localhost:8000/api/v1/storefront/products?q=cake&page=1&page_size=20'
+curl --resolve happy-bakery.localhost:8000:127.0.0.1 http://happy-bakery.localhost:8000/api/v1/storefront/products/PRODUCT_ID
+```
+
+Lists use the existing page envelope and decimal-string prices. Draft, deleted, missing or another business's product IDs return `404`, even if a query parameter asks for drafts or supplies another business ID. Business profiles expose name/slug/description, public contact/address, currency and logo_url only. Local Vite forwards Host on `/api` and `/media`; use `<slug>.localhost:5173` where your OS resolves it, or add an explicit local hosts entry. This enables API routing; Vue storefront screens remain unimplemented.
+
+B09 configuration and operational commands are described in [deployment preparation](../deploy/README.md). Start/restart local backend processes with `make dev-backend` so Uvicorn's own proxy processing is disabled; the app's explicit trusted-proxy policy handles it. Existing env files may omit `TRUSTED_PROXY_IPS` (default empty). Cleanup is dry-run by default; no production services or schedules are enabled automatically.
 
 ## Errors and existing operational APIs
 
-Planned errors use a consistent envelope:
+API errors use a consistent envelope:
 
 ```json
 {
@@ -202,7 +216,7 @@ Planned errors use a consistent envelope:
 
 `fields` is optional. Use `401` for missing/expired sessions, `403` for CSRF rejection, `404` for missing or non-owned resources, `409` for uniqueness conflicts, `413` for oversized uploads, `415` for unsupported image formats, `422` for invalid fields, and `429` for rate limits. Never expose database errors or credentials. Add exception handlers to normalize framework validation/HTTP errors when implementing the contract.
 
-Existing operational endpoints stay unversioned: `GET /api/health` checks the API process; `GET /api/ready` checks database connectivity and returns `503` if unavailable. Their current response format remains unchanged. Interactive API documentation is at `/api/docs` and will reflect endpoints as they are implemented.
+Existing operational endpoints stay unversioned: `GET /api/health` checks the API process; `GET /api/ready` checks database connectivity and returns `503` if unavailable. Their current response format remains unchanged. Interactive API documentation is at `/api/docs` in development; production hides Swagger and OpenAPI routes.
 
 ## Implementation order and scope
 

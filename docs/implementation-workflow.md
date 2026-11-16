@@ -83,7 +83,7 @@ Suggested first concurrent pair after review: B01 (backend session/CSRF foundati
 
 The proposed production layout remains the one in the API contract: root domain for the landing page, `admin.<domain>` for registration/login/dashboard, and `<slug>.<domain>` for public storefronts. A nested `admin.<slug>.<domain>` layout requires a separate domain/certificate decision before implementation.
 
-For local multi-host development, plan to use `localhost:5173`, `admin.localhost:5173`, and `<slug>.localhost:5173`. B01/B07/F01 must align their trusted origins, generated URLs, Vite host handling, and host routing. Verify name resolution on each machine and document explicit hosts-file entries if needed. This routing is planned and is not enabled by this documentation change.
+For local multi-host development, plan to use `localhost:5173`, `admin.localhost:5173`, and `<slug>.localhost:5173`. B01/B07/F01 must align their trusted origins, generated URLs, Vite host handling, and host routing. Verify name resolution on each machine and document explicit hosts-file entries if needed. B07 now enables backend API hostname resolution and Vite Host forwarding; Vue storefront host routing/screens remain F08 work.
 
 Use relative `/api` calls on each UI origin. Nginx/Vite must preserve the intended storefront host; the backend must trust forwarded host information only from explicitly trusted proxies. Do not enable wildcard credentialed CORS or share owner-session cookies with storefront hosts.
 
