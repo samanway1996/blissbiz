@@ -1,6 +1,6 @@
 # B01 session and CSRF contract
 
-B01 implements server-side sessions and request-verification helpers. B02 now uses them for registration; login/logout/profile remain future tasks. This contract is shared by B02/B03 and frontend task F02.
+B01 implements server-side sessions and request-verification helpers. B02 uses them for registration and B03 for login/logout/profile. This contract is shared by B02/B03 and frontend task F02.
 
 ## Bootstrap and expiration
 
@@ -54,6 +54,7 @@ Production example (replace the example domain):
 
 ```dotenv
 APP_ENV=production
+UPLOAD_DIR=/var/lib/blissbiz/uploads
 AUTH_ALLOWED_ORIGINS=["https://admin.example.com"]
 STOREFRONT_BASE_URL=https://example.com
 ADMIN_BASE_URL=https://admin.example.com

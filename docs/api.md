@@ -1,6 +1,6 @@
 # BlissBiz API plan
 
-Contract for the hackathon MVP: register a business, manage its catalog through an owner dashboard, and display published products on a public storefront. B00 implements slug availability; B01 implements CSRF/session foundations; B02 implements registration. `/api/health` and `/api/ready` also exist. Login/logout/profile, admin, and storefront endpoints remain planned.
+Contract for the hackathon MVP: register a business, manage its catalog through an owner dashboard, and display published products on a public storefront. B00–B06 implement slug availability, sessions, registration, authentication, owner business settings, product CRUD/publication and image uploads. `/api/health`, `/api/ready` and `/media/...` also exist. Host-based storefront APIs remain planned.
 
 ## Conventions
 
@@ -71,7 +71,30 @@ The example uses the proposed central admin hostname. Generate URLs from trusted
 | GET | `/auth/me` | Owner | Return the current owner profile. |
 | POST | `/auth/logout` | Owner + CSRF | Invalidate the server session and clear its cookie; return `204`. |
 
-`GET /auth/csrf` is implemented; login/logout/profile are planned. See [the B01 session contract](session-security.md) for exact expiry, rotation, cookie/origin rules, dependencies, configuration, and review instructions.
+All four authentication endpoints are implemented. See [the B01 session contract](session-security.md) for expiry, cookie and origin rules.
+
+### Basic authentication requests
+
+Use the same host throughout, for example `http://127.0.0.1:8000`. Keep cookies enabled in your API client.
+
+1. `GET /api/v1/auth/csrf` — no body. Save `csrf_token`; the response also sets the session cookie.
+2. `POST /api/v1/auth/login` — send `Content-Type: application/json`, `Origin: http://127.0.0.1:8000` and `X-CSRF-Token: <csrf_token>` with an existing registered owner's credentials:
+
+```json
+{
+  "email": "asha@example.com",
+  "password": "a long test passphrase"
+}
+```
+
+Login returns `200` with `{ "id": "owner-uuid", "full_name": "Asha", "email": "asha@example.com" }` and replaces the session cookie. Email is normalized; passwords are not trimmed. Login may replace an already authenticated session after valid credentials/CSRF checks.
+
+3. `GET /api/v1/auth/me` — no body; send the current cookie. Returns the same profile shape. Missing, anonymous or expired sessions return `401`.
+4. Before logout, call `GET /api/v1/auth/csrf` again to obtain the rotated token. `POST /api/v1/auth/logout` has **no body**; send the cookie, `Origin` and the fresh `X-CSRF-Token`. Returns `204`, revokes the server session and clears its cookie. Logging in again requires a new CSRF bootstrap.
+
+Unknown email and wrong password both return `401 invalid_credentials`. Missing/mismatched CSRF or an untrusted origin returns `403`. Authentication responses are marked `Cache-Control: no-store`.
+
+Login uses independently committed database counters: by default 20 attempts per network peer and 5 per normalized email in a 900-second fixed window. Validated, CSRF-verified attempts count, including successful logins; counters are not reset by logout or failed transactions. `429` includes `Retry-After`. Limits are configured with `LOGIN_PEER_RATE_LIMIT`, `LOGIN_ACCOUNT_RATE_LIMIT`, and `LOGIN_RATE_WINDOW_SECONDS`. Changing networks does not bypass the account quota; exhausting it temporarily blocks that account until the next window. Forwarded client IPs are not read directly; trusted production proxy handling remains B09.
 
 Use a host-only HttpOnly session cookie, Secure in production and `SameSite=Lax`. Send `X-CSRF-Token` on all state-changing requests, including registration and login; obtain a fresh token after session rotation. Do not return session credentials in JSON or store them in browser local storage. Return a generic `401` for invalid login credentials and rate-limit authentication and registration.
 
@@ -80,6 +103,8 @@ Serve registration/login and owner APIs from the central admin origin; the landi
 ## Admin panel
 
 All routes below require an owner session; all mutations also require CSRF protection.
+
+All admin routes listed below are implemented through B06. Use the cookie and mutation headers described under [authentication](#basic-authentication-requests). Admin responses are not cached. Missing and non-owned resources both return `404`.
 
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
@@ -106,9 +131,48 @@ Product creation body:
 }
 ```
 
-Require a name and nonnegative price with at most two decimal places. Currency comes from the business. Product responses include `id`, `business_id`, `name`, `description`, `price`, `status`, `image_url` (nullable), `created_at`, and `updated_at`. Draft is the default; publishing uses `PATCH`. Currency changes are deferred to avoid reinterpreting existing prices.
+Require a name (1–150 characters) and a nonnegative decimal-string price from `"0"` to `"9999999999.99"` with at most two decimal places. JSON numbers are rejected to avoid floating-point ambiguity. Responses always format two decimal places. Description is optional (up to 5,000 characters). Currency comes from the business. Product responses include `id`, `business_id`, `name`, `description`, `price`, `status`, `image_url` (nullable), `created_at`, and `updated_at`. Draft is the default; publishing uses `PATCH`. Currency changes are deferred to avoid reinterpreting existing prices.
 
-For uploads, accept JPEG, PNG, and WebP up to 5 MiB per file. Validate actual file content, use generated filenames, and return the updated resource with its public image URL. Attach files only to an owned resource. Failed uploads must preserve the existing image; replacement/deletion cleanup must not remove another resource's files. Uploaded images are public assets, including images attached to draft products; private draft media is outside the MVP.
+### Basic business/product requests
+
+First `GET /api/v1/admin/businesses` to find your `business_id`. It returns the standard paginated envelope, including each business's public contact fields, logo URL, currency, timestamps and configured admin/storefront URLs. Private owner fields and disk paths are excluded. Business lists use `page`/`page_size` too.
+
+`PATCH /api/v1/admin/businesses/{business_id}` — example JSON:
+
+```json
+{
+  "name": "Happy Bakery",
+  "description": "Baked fresh daily",
+  "contact_email": "hello@example.com",
+  "contact_phone": "+919000000001",
+  "address": "Shop 12, Market Road"
+}
+```
+
+`POST /api/v1/admin/businesses/{business_id}/products` — use the product creation JSON above. Save the returned `id` as `product_id`.
+
+`PATCH /api/v1/admin/businesses/{business_id}/products/{product_id}` — example JSON:
+
+```json
+{
+  "price": "549.00",
+  "status": "published"
+}
+```
+
+Use `{"status":"draft"}` to unpublish or `{"description":null}` to clear a description. Omitted fields stay unchanged. Empty patches and explicit null for name/price/status are rejected. Business slug/currency and all IDs, timestamps, storage paths and ownership fields cannot be edited. Nullable business description/contact/address fields may be cleared with null.
+
+`GET /api/v1/admin/businesses/{business_id}/products?q=cake&status=published&page=1&page_size=20` searches name/description; omit status to include drafts. Search is case-insensitive, treats SQL wildcard characters literally, and accepts 1–150 trimmed characters. Page starts at 1 (maximum 1,000,000), page size is 1–100. `GET` detail and `DELETE` product need no body; deletion returns `204`.
+
+### Image uploads
+
+`PUT /api/v1/admin/businesses/{business_id}/products/{product_id}/image` or `PUT /api/v1/admin/businesses/{business_id}/logo` takes **multipart form data**, with a single file field named `file`. Choose the image in Swagger's file picker or your API client's form-data tab. Send the owner cookie, `Origin` and `X-CSRF-Token`; let the client generate Content-Type and its multipart boundary. There is no JSON body. The response is the updated product/business. Corresponding `DELETE` requests take no body and return `204`; removing an already absent image also succeeds.
+
+Accept still JPEG, PNG and WebP up to 5 MiB per file and 20 megapixels. Content is decoded and re-encoded, ignoring the supplied MIME type/filename; phone orientation is applied and metadata/trailing content removed. Animated/oversized-dimension images return `422`, invalid/unsupported content `415`, and excessive file/request size `413`. The processed file must also fit 5 MiB. The multipart request limit is 5 MiB plus 64 KiB of overhead, enforced before parsing, including chunked requests.
+
+Files use generated names under `UPLOAD_DIR/businesses/{business_id}/{random-name}.{jpg|png|webp}`. The default local root is ignored `backend/uploads`; production requires an absolute persistent root outside this checkout/deployment folder. MySQL stores relative paths only. Responses expose relative `/media/businesses/...` URLs; FastAPI serves validated, referenced files with `nosniff`, and Vite proxies `/media` locally. Public media needs no session, including for draft products. Removed/unreferenced paths return `404`; browser caches may retain previously fetched images for up to one hour. Private draft media is outside the MVP.
+
+Replacement writes a new generated file, commits its reference, then removes the old file only if no business/logo/product references it. Mutations lock business/product rows to serialize concurrent changes. Failed database writes roll back references and clean the new file if it is unreferenced; an uncertain commit never deletes a referenced new image. Disk/DB failure during post-commit cleanup leaves an unused file and logs a generic warning, while the completed operation succeeds. Cleanup retries/orphan reconciliation and scheduling after process crashes remain B09 operational work; no automatic deletion scan runs in B06.
 
 ## End customer website
 

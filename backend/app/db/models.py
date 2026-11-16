@@ -1,7 +1,18 @@
 from datetime import UTC, datetime
+from decimal import Decimal
 from uuid import uuid4
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.session import Base
@@ -59,6 +70,29 @@ class BrowserSession(Base):
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(), default=utc_now)
     expires_at: Mapped[datetime] = mapped_column(DateTime(), index=True)
+
+
+class Product(Base):
+    __tablename__ = "products"
+    __table_args__ = (
+        CheckConstraint("price >= 0", name="ck_products_price_nonnegative"),
+        CheckConstraint("status IN ('draft', 'published')", name="ck_products_status"),
+        Index("ix_products_business_status", "business_id", "status"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    business_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("businesses.id", name="fk_products_business_id_businesses", ondelete="RESTRICT"),
+        index=True,
+    )
+    name: Mapped[str] = mapped_column(String(150))
+    description: Mapped[str | None] = mapped_column(Text())
+    price: Mapped[Decimal] = mapped_column(Numeric(12, 2))
+    status: Mapped[str] = mapped_column(String(16), default="draft")
+    image_path: Mapped[str | None] = mapped_column(String(512))
+    created_at: Mapped[datetime] = mapped_column(DateTime(), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(), default=utc_now, onupdate=utc_now)
 
 
 class RateLimitBucket(Base):

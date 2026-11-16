@@ -20,11 +20,11 @@ Code completion, user acceptance, and merging are separate facts. Record merge r
 | F00 | Vue/Vite starter and API connection page | review | Initial implementation; claim review owner | Starter exists in `frontend/`; previous production build passed. No explicit acceptance recorded. |
 | B01 | Session and CSRF foundation | review | Codex; `codex/b01-session-csrf`, uncommitted | Migration 0002 applied; `make check` passed (72 tests + lint/format/build), `make test-mysql` passed (130 tests), real-app in-process smoke and Alembic drift check passed. See handoff below. |
 | B02 | Transactional business registration | review | Codex; `codex/b02-registration`, uncommitted | Migration 0003 applied; project checks passed (109 tests; 1 opt-in test skipped), MySQL suite 195 passed; real-app registration/quota rollback checks passed. See handoff below. |
-| B03 | Login/logout/current owner | planned | Unassigned | B02. |
-| B04 | Owner business APIs | planned | Unassigned | B03. |
-| B05a | Product create/list/detail | planned | Unassigned | B04. |
-| B05b | Product edit/delete/publication | planned | Unassigned | B05a. |
-| B06 | Logo and product images | planned | Unassigned | B05b. |
+| B03 | Login/logout/current owner | review | Codex; `codex/b03-owner-auth`, uncommitted | Project checks: 127 passed, 1 expected MySQL-only skip; MySQL suite: 231 passed. Login rotation, revocation, generic failures, owner isolation, quota and rollback checks pass. |
+| B04 | Owner business APIs | review | Codex; `codex/b04-b06-catalog-images`, uncommitted | Owned business list/detail/PATCH; cross-owner isolation and validation checked on SQLite/MySQL. See combined handoff. |
+| B05a | Product create/list/detail | review | Codex; `codex/b04-b06-catalog-images`, uncommitted | Migration 0004 applied; exact decimal prices, draft defaults, search/pagination and tenant boundaries pass. |
+| B05b | Product edit/delete/publication | review | Codex; `codex/b04-b06-catalog-images`, uncommitted | Partial updates, publish/unpublish, deletion, rollback and image cleanup checks pass. |
+| B06 | Logo and product images | review | Codex; `codex/b04-b06-catalog-images`, uncommitted | Validated uploads, persistent root configuration, public media and transaction-aware cleanup pass; combined MySQL suite 403 tests. |
 | B07 | Host resolution and public business profile | planned | Unassigned | B04. |
 | B08 | Public product catalog | planned | Unassigned | B05b, B07. |
 | B09 | Backend integration and deployment preparation | planned | Unassigned | B06, B08. |
@@ -46,11 +46,11 @@ Resolve each when its task is claimed; none blocks reviewing the existing implem
 | Decision | Resolve before |
 | --- | --- |
 | B01 defines 15-minute anonymous/8-hour owner sessions, rotation, exact admin origins, and secure production cookies; review [the contract](session-security.md) | B01 acceptance |
-| B02 uses Argon2id and SQL-backed registration limits of 5 attempts/900 seconds; review [the contract](registration.md). Login-specific throttling remains B03 work. | B02 acceptance / B03 implementation |
+| SQL-backed fixed-window limits: registration 5 per peer; login 20 per peer and 5 per normalized account, each per 900 seconds by default. See [API configuration](api.md#basic-authentication-requests). | Review defaults before production; proxy handling remains B09. |
 | Frontend component library, if any; otherwise continue with existing CSS | F01 implementation |
 | Frontend lint/format and automated UI testing tools | Adding those checks; discuss dependencies first |
 | Confirm central admin hostname and verify local subdomain routing on each OS | F01 navigation/B01 origin integration, finalized by B07 |
-| Persistent upload paths, image validation library, and cleanup strategy | B06 implementation |
+| B06 uses local backend/uploads or production UPLOAD_DIR outside deployments; Pillow validates/re-encodes; cleanup checks references after commit. Crash/orphan reconciliation remains B09. | Production maintenance/backup setup before deployment |
 | Exact GoDaddy product, production domain, DNS/HTTPS, proxy, and backup setup | B09 preparation; deployment requires separate authorization |
 
 ## Handoff template
@@ -80,7 +80,7 @@ Next eligible task (requires authorization):
 
 ## Current checkpoint
 
-Implementation is paused after B02. Slug availability, session/CSRF foundations, and transactional registration are implemented. Login/logout/profile, admin catalog, and storefront APIs remain unimplemented; the frontend remains a development status page. No production deployment has been performed. The user explicitly authorized each next slice without separate acceptance records, so earlier review statuses remain unchanged. B03 requires review and further authorization.
+Implementation is paused for joint review through B06, as requested. Owner business settings, product CRUD/search/publication, logo/product image uploads and public media serving now join registration/authentication. B07/B08 host-based storefront APIs and frontend business screens remain planned. Local migration head is 0004; no deployment was performed. Earlier review statuses are preserved; later implementation requires a user request.
 
 ## B01 handoff
 
@@ -116,3 +116,31 @@ Historical B01 checkpoint; the B02 handoff below describes the current implement
 - Review: [B02 review guide](registration.md#review-b02); install locked dependencies, migrate, then use the same-origin Swagger CSRF bootstrap and POST registration flow. Manual review creates local records intentionally; automated tests do not leave business records behind.
 - Acceptance/merge: pending. No commit, PR, or merge created.
 - Next backend task after acceptance and authorization: B03. Frontend F03 can consume registration after F01/F02 and contract acceptance.
+
+
+## B03 handoff
+
+- Status/reference: review; Codex, `codex/b03-owner-auth`, uncommitted changes after base `a9d01a3`. User authorized this next slice and requested basic documentation with request bodies.
+- Scope: authentication routes/service/schemas, owner lookup helpers, shared fixed-window quota base and login quotas, optional settings/environment example, 18 focused authentication tests, and updates to existing API/README/status documentation. No new verification document, dependency or migration.
+- Behavior: login returns a minimal owner profile, rotates cookie/session/CSRF after credential verification and commit, and uses generic invalid-credential errors with dummy Argon2 verification for unknown accounts. `/auth/me` derives the owner solely from the cookie. Logout revokes the server record and clears the cookie after commit. Failed commits preserve the prior session and emit no credential cookie.
+- Quota: independently committed counters through the existing dedicated pool; defaults 20 attempts per network peer and 5 per normalized account per 900-second window. Successes and failures count. Account quota applies across peers; new CSRF sessions or forwarded IP headers do not reset it. `429` includes Retry-After. Proxy trust/cleanup scheduling remain B09.
+- Verification: `make check` passed (127 tests, 1 expected opt-in MySQL skip; Ruff lint/format and Vue build). `make test-mysql` passed (231 tests across SQLite/MySQL). Existing TestClient deprecation warning remains. Tests cover session/CSRF rotation and replay, expiry, cookie-owner isolation, login/logout origin/CSRF checks, generic failures, rollback, normalized account/peer throttling, window reset and successful-login quota consumption.
+- Runtime/data: no backend process started or stopped; no schema or dependency changes. Business/session test writes roll back using existing fixtures. No deployment.
+- Usage: [basic authentication requests](api.md#basic-authentication-requests) provides the login JSON and headers. GET me and POST logout take no body.
+- Acceptance/merge: pending; no commit or PR created for B03. Next backend slice is B04, only upon user request.
+
+
+## B04–B06 combined handoff
+
+- Status: review, acceptance pending. User explicitly requested implementation through B06 before review. No B07/B08 or business frontend implementation.
+- Reference: Codex, `codex/b04-b06-catalog-images`, uncommitted. Branch carries earlier uncommitted B03 work; do not attribute every changed/untracked file to this slice.
+- Owned scope: admin routes; catalog schemas/repositories/service; Product model and migration 0004; image storage/media repository/service/routes and bounded-upload middleware; settings, environment example, locked dependencies, application router, Vite media proxy; shared catalog fixture and catalog/image tests; basic examples in existing API/README documentation. No separate verification guide created.
+- Behavior: paginated owned business list/detail/PATCH, immutable slug/currency; tenant-scoped product create/list/detail/PATCH/delete, string-decimal prices, draft/published states and literal case-insensitive search. Reads require an owner and mutations require CSRF/origin verification; missing and non-owned IDs return 404. Mutations lock business/product rows and refresh persisted values before responses.
+- Images: still JPEG/PNG/WebP, at most 5 MiB and 20 MP; generated paths, decoding/re-encoding, orientation correction and metadata removal; bounded multipart requests; public referenced-only media with nosniff. Replacement/delete cleanup runs after commit and checks all product/logo references. Rollback removes unreferenced new files; uncertain commits preserve referenced new files. Shared paths, unsafe paths/symlinks, failed writes and name collisions are covered.
+- Storage/config: default ignored backend/uploads; production requires an absolute UPLOAD_DIR outside the deployment directory. Preserve the root across releases and back it up with MySQL. Vite proxies /media; production Nginx/backup configuration remains B09. Added Pillow 13.0.0 and python-multipart 0.0.34, declared and locked. No existing local environment files were overwritten.
+- Database: additive migration 0004 creates products with business FK, indexes, price/status checks and Numeric(12,2). Applied locally; Alembic current reports 0004 and check reports no drift. No destructive downgrade or business-data deletion.
+- Verification: make check passed (214 tests, 1 expected MySQL concurrency skip, Ruff lint/format and Vue build); make test-mysql passed (403 tests across SQLite/MySQL). pip check passed; documentation links/JSON examples and portable lock validated. Existing TestClient deprecation warning remains.
+- Integration: real-app in-process MySQL flow passed registration, business settings, product creation, logo/image upload and serving, publication/filtering, media/product deletion, logout/login. Outer rollback removed smoke business/session writes, temporary media was removed, and only that run's uniquely keyed committed security counters were cleaned. Your backend process was not started/stopped.
+- Known limits: post-commit cleanup failures log a generic warning and leave an unused file; retry/reconciliation after disk failure or process crash is B09 work. Previously fetched public images may remain in browser caches for up to one hour. Public storefront/catalog pages are still unimplemented.
+- Usage: docs/api.md contains business/product JSON bodies, list/filter examples and multipart file-field instructions; /api/docs exposes the implemented routes. For a new contributor: make setup, make db-migrate, then start their own backend terminal.
+- Acceptance/merge: pending user review; no commit, PR, merge or deployment created. Next backend slice is B07 only after authorization.

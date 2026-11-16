@@ -1,6 +1,6 @@
 # BlissBiz
 
-Small-business website platform built with Vue 3 + Vite, FastAPI, and MySQL. The backend supports registration and session/CSRF foundations; login and catalog features and the business frontend screens are not implemented yet.
+Small-business website platform built with Vue 3 + Vite, FastAPI, and MySQL. The backend supports registration, login/logout, owner business settings, product CRUD/publication, and logo/product image uploads. Host-based storefront APIs and business frontend screens remain planned.
 
 The planned registration, owner dashboard, and storefront endpoints are documented in [the API plan](docs/api.md).
 
@@ -8,7 +8,7 @@ For coordinated development across contributors and chats, follow [the implement
 
 Iteration 1 implements the owner/business schema and public slug availability endpoint. API routes use request/response schemas, services for rules, and repositories for persistence.
 
-B01 adds server-side session storage and CSRF/security helpers; see [the session contract](docs/session-security.md). B02 adds transactional registration, Argon2id password hashing, generated business URLs, and shared rate limiting; see [the registration review guide](docs/registration.md). Login remains B03 work.
+B01 adds server-side session storage and CSRF/security helpers; see [the session contract](docs/session-security.md). B02 adds transactional registration, Argon2id password hashing, generated business URLs, and shared rate limiting; see [the registration review guide](docs/registration.md). B03 adds login/logout/profile and login throttling; [basic request examples](docs/api.md#basic-authentication-requests) include the login body. Optional login limits and defaults are listed in `backend/.env.example`; existing local environment files can use these defaults. No B03 migration is needed.
 
 ## Start on this Mac
 
@@ -80,6 +80,10 @@ backend/
 ```
 
 Database models inherit from `app.db.session.Base`; import model modules in `backend/migrations/env.py` so Alembic discovers them. Migration `0001` creates owners/businesses, `0002` adds sessions, and `0003` adds shared rate-limit counters. Database timestamps are stored as UTC.
+
+B04–B06 add business settings, product CRUD/search/publication and image APIs; migration `0004` creates products. Run `make setup` to install the updated locked dependencies (Pillow and python-multipart), then `make db-migrate`. [Basic request bodies](docs/api.md#basic-businessproduct-requests) and [upload fields](docs/api.md#image-uploads) are in the API document and `/api/docs`.
+
+Image storage defaults to ignored `backend/uploads`, resolved from the backend project location. To choose another location, set an absolute `UPLOAD_DIR` in `backend/.env`. Production requires a directory outside this checkout/deployment folder, such as `/var/lib/blissbiz/uploads`, writable by the backend service. Keep it across releases and back it up alongside MySQL. Only image paths are stored in MySQL; restoring the database alone does not restore pictures. FastAPI serves `/media` and Vite proxies it locally; production Nginx routing/backup operations remain B09 work. Never mount the whole upload root as executable web content.
 
 For your IDE, select `backend/.venv/bin/python3` as the Python interpreter and `.tools/node/bin/node` as the Node interpreter on this Mac. Activating Python manually is optional; the Make commands already use the virtual environment.
 

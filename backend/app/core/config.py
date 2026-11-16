@@ -19,6 +19,10 @@ class Settings(BaseSettings):
     admin_base_url: str = "http://admin.localhost:5173"
     registration_rate_limit: int = Field(default=5, ge=1, le=1000)
     registration_rate_window_seconds: int = Field(default=900, ge=1, le=86400)
+    login_peer_rate_limit: int = Field(default=20, ge=1, le=1000)
+    login_account_rate_limit: int = Field(default=5, ge=1, le=1000)
+    login_rate_window_seconds: int = Field(default=900, ge=1, le=86400)
+    upload_dir: Path = Path(__file__).resolve().parents[2] / "uploads"
     auth_allowed_origins: list[str] = Field(
         default_factory=lambda: [
             "http://127.0.0.1:5173",
@@ -66,6 +70,13 @@ class Settings(BaseSettings):
         ):
             raise ValueError("Production admin origins must explicitly use HTTPS.")
         if self.app_env == "production":
+            deployment_root = Path(__file__).resolve().parents[3]
+            if not self.upload_dir.is_absolute() or self.upload_dir.resolve().is_relative_to(
+                deployment_root
+            ):
+                raise ValueError(
+                    "Production UPLOAD_DIR must be absolute and outside the deployment directory."
+                )
             if not self.storefront_base_url.startswith(
                 "https://"
             ) or not self.admin_base_url.startswith("https://"):

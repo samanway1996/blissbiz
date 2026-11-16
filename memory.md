@@ -29,3 +29,19 @@ Root cause: A quota write in the registration transaction would roll back with t
 Fix: Commit quota operations through RateLimitSessionLocal with its own bounded pool; keep owner/business/rotation in the request transaction. Use create_savepoint when joining test sessions to their outer rollback transaction. Reuse the configured URL builder and normalize emails before duplicate checks.
 Verification: 195 SQLite/MySQL tests passed, including concurrent native MySQL counters, preserved anonymous sessions after failure, and uniqueness races. Real-app smoke confirmed quota persisted across registration rollback and cleaned only its unique test counter.
 Reuse hint: Apply these boundaries to B03 login throttling; do not consume quota in the credential transaction or share its nested connection checkout pool.
+
+## [2026-11-16] Refresh persisted timestamps before returning catalog mutations
+Context: BlissBiz B04–B06 on SQLite/MySQL.
+Signal: A successful product create returned fractional timestamps that differed from the next GET; five MySQL tests failed while SQLite passed.
+Root cause: MySQL's existing DATETIME precision rounds fractional seconds, while the Python model retains its original microseconds until refreshed.
+Fix: Flush and refresh new/updated resources before building response DTOs; commit before returning. Mutation reads/refreshes use FOR UPDATE to read current rows when MySQL uses repeatable-read snapshots.
+Verification: Catalog lifecycle/rollback checks and the full 403-test SQLite/MySQL suite passed; real-app MySQL smoke passed. No timestamp migration or weakening of response assertions was needed.
+Reuse hint: Return persisted values in mutation responses; do not assume a Python default is identical to the stored DB value.
+
+## [2026-11-16] Coordinate image cleanup with committed references
+Context: BlissBiz B06 filesystem-backed image uploads.
+Signal: Replacing/deleting images must survive DB/disk failure and preserve files still referenced by another product or logo.
+Root cause: Filesystem writes and SQL transactions do not share an atomic commit; deleting early or blindly compensating an uncertain commit can destroy the live image.
+Fix: Decode/re-encode into a new generated path, update/commit the DB reference, then remove old files only after checking all references and business path scope. After rollback, check references before removing new files. Keep files if DB state is unavailable. Bound upload bytes before multipart parsing and validate safe paths/symlinks. Post-commit cleanup failures log generically; crash/orphan reconciliation is B09 work.
+Verification: Tests cover rollback, uncertain commit acknowledgement, shared references, partial writes/name collisions, symlinks, malformed/oversized images, orientation and transparency; 403 SQLite/MySQL tests and a real-app upload/serve/delete flow passed.
+Reuse hint: Preserve UPLOAD_DIR across deployments and back it up with MySQL; production requires an absolute root outside the checkout.

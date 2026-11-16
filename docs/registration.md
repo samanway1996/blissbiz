@@ -1,6 +1,6 @@
 # B02 business registration
 
-`POST /api/v1/registrations` creates a new owner and business, replaces the anonymous session with an owner session, and returns admin/storefront URLs. Login/logout/profile and both business UIs remain later tasks. Generated URLs describe the eventual routes; registration does not deploy a new app or provision DNS.
+`POST /api/v1/registrations` creates a new owner and business, replaces the anonymous session with an owner session, and returns admin/storefront URLs. Login/logout/profile are implemented in B03; both business UIs remain later tasks. Generated URLs describe the eventual routes; registration does not deploy a new app or provision DNS.
 
 ## Request and response
 

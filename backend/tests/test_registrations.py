@@ -319,6 +319,7 @@ def test_production_urls_use_configured_https_domain():
         _env_file=None,
         database_url="sqlite://",
         app_env="production",
+        upload_dir="/var/lib/blissbiz/uploads",
         auth_allowed_origins=["https://admin.example.com"],
         storefront_base_url="https://example.com",
         admin_base_url="https://admin.example.com",

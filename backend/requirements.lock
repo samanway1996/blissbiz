@@ -21,6 +21,7 @@ Mako==1.4.3
 MarkupSafe==3.0.4
 opentelemetry-api==1.45.2
 packaging==26.3
+pillow==13.0.0
 pluggy==1.7.0
 pycparser==3.12
 pydantic==2.14.3
@@ -30,6 +31,7 @@ Pygments==2.21.0
 PyMySQL==1.2.4
 pytest==9.2.0
 python-dotenv==1.2.4
+python-multipart==0.0.34
 PyYAML==6.0.3
 ruff==0.17.5
 SQLAlchemy==2.1.8
