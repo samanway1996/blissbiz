@@ -16,18 +16,18 @@ Code completion, user acceptance, and merging are separate facts. Record merge r
 
 | ID | Deliverable | Status | Owner and branch | Evidence or blocker |
 | --- | --- | --- | --- | --- |
-| B00 | Models, initial migration, slug availability | review | Initial implementation; claim review owner | Files exist in `backend/`; previous run reported 49 tests across SQLite/MySQL plus project checks. Re-run before accepting; no explicit acceptance recorded. |
+| B00 | Models, initial migration, slug availability | accepted | Codex; reviewed by project owner | Foundation included in the final backend verification (474 SQLite/MySQL tests). Accepted by the user on 2026-11-17; see backend acceptance record below. |
 | F00 | Vue/Vite starter and API connection page | review | Initial implementation; claim review owner | Starter exists in `frontend/`; previous production build passed. No explicit acceptance recorded. |
-| B01 | Session and CSRF foundation | review | Codex; `codex/b01-session-csrf`, uncommitted | Migration 0002 applied; `make check` passed (72 tests + lint/format/build), `make test-mysql` passed (130 tests), real-app in-process smoke and Alembic drift check passed. See handoff below. |
-| B02 | Transactional business registration | review | Codex; `codex/b02-registration`, uncommitted | Migration 0003 applied; project checks passed (109 tests; 1 opt-in test skipped), MySQL suite 195 passed; real-app registration/quota rollback checks passed. See handoff below. |
-| B03 | Login/logout/current owner | review | Codex; `codex/b03-owner-auth`, uncommitted | Project checks: 127 passed, 1 expected MySQL-only skip; MySQL suite: 231 passed. Login rotation, revocation, generic failures, owner isolation, quota and rollback checks pass. |
-| B04 | Owner business APIs | review | Codex; `codex/b04-b06-catalog-images`, uncommitted | Owned business list/detail/PATCH; cross-owner isolation and validation checked on SQLite/MySQL. See combined handoff. |
-| B05a | Product create/list/detail | review | Codex; `codex/b04-b06-catalog-images`, uncommitted | Migration 0004 applied; exact decimal prices, draft defaults, search/pagination and tenant boundaries pass. |
-| B05b | Product edit/delete/publication | review | Codex; `codex/b04-b06-catalog-images`, uncommitted | Partial updates, publish/unpublish, deletion, rollback and image cleanup checks pass. |
-| B06 | Logo and product images | review | Codex; `codex/b04-b06-catalog-images`, uncommitted | Validated uploads, persistent root configuration, public media and transaction-aware cleanup pass; combined MySQL suite 403 tests. |
-| B07 | Host resolution and public business profile | review | Codex; `codex/b07-b09-storefront-deploy`, uncommitted | Strict Host resolution and public-only profile; malformed/unknown/forwarded-host cases pass. |
-| B08 | Public product catalog | review | Codex; `codex/b07-b09-storefront-deploy`, uncommitted | Published-only, tenant-scoped list/detail/search/pagination; draft, deleted and cross-business IDs return 404. |
-| B09 | Backend integration and deployment preparation | review | Codex; `codex/b07-b09-storefront-deploy`, uncommitted | 474 SQLite/MySQL tests; isolated verified-HTTPS Nginx/two-worker integration, restart persistence and backup/restore passed. No production deployment. |
+| B01 | Session and CSRF foundation | accepted | Codex; `codex/b01-session-csrf` | Migration 0002 applied; `make check` passed (72 tests + lint/format/build), `make test-mysql` passed (130 tests), real-app in-process smoke and Alembic drift check passed. See handoff below. |
+| B02 | Transactional business registration | accepted | Codex; `codex/b02-registration` | Migration 0003 applied; project checks passed (109 tests; 1 opt-in test skipped), MySQL suite 195 passed; real-app registration/quota rollback checks passed. See handoff below. |
+| B03 | Login/logout/current owner | accepted | Codex; `codex/b03-owner-auth` | Project checks: 127 passed, 1 expected MySQL-only skip; MySQL suite: 231 passed. Login rotation, revocation, generic failures, owner isolation, quota and rollback checks pass. |
+| B04 | Owner business APIs | accepted | Codex; `codex/b04-b06-catalog-images` | Owned business list/detail/PATCH; cross-owner isolation and validation checked on SQLite/MySQL. See combined handoff. |
+| B05a | Product create/list/detail | accepted | Codex; `codex/b04-b06-catalog-images` | Migration 0004 applied; exact decimal prices, draft defaults, search/pagination and tenant boundaries pass. |
+| B05b | Product edit/delete/publication | accepted | Codex; `codex/b04-b06-catalog-images` | Partial updates, publish/unpublish, deletion, rollback and image cleanup checks pass. |
+| B06 | Logo and product images | accepted | Codex; `codex/b04-b06-catalog-images` | Validated uploads, persistent root configuration, public media and transaction-aware cleanup pass; combined MySQL suite 403 tests. |
+| B07 | Host resolution and public business profile | accepted | Codex; `codex/b07-b09-storefront-deploy` | Strict Host resolution and public-only profile; malformed/unknown/forwarded-host cases pass. |
+| B08 | Public product catalog | accepted | Codex; `codex/b07-b09-storefront-deploy` | Published-only, tenant-scoped list/detail/search/pagination; draft, deleted and cross-business IDs return 404. |
+| B09 | Backend integration and deployment preparation | accepted | Codex; `codex/b07-b09-storefront-deploy` | 474 SQLite/MySQL tests; isolated verified-HTTPS Nginx/two-worker integration, restart persistence and backup/restore passed. No production deployment. |
 | F01 | Landing page and CTA | planned | Unassigned | After F00 acceptance and authorization. |
 | F02 | Shared client and session handling | planned | Unassigned | F00, B01. |
 | F03 | Registration form and success page | planned | Unassigned | F01, F02, B02. |
@@ -80,7 +80,17 @@ Next eligible task (requires authorization):
 
 ## Current checkpoint
 
-Implementation is paused for review through B09, as requested. Backend storefront profile/published-product APIs, explicit proxy trust, maintenance and deployment/backup preparation are implemented and locally verified. Business frontend screens remain planned. Schema head remains 0004; no production deployment, service installation or offsite backup configuration was performed. Earlier review statuses remain unchanged; further implementation requires a user request.
+Backend tasks B00–B09 (including B05a/B05b) are accepted by the project owner on 2026-11-17. Backend APIs, proxy handling, maintenance and deployment preparation are implemented and locally verified. Frontend statuses are unchanged: F00 awaits review and F01–F09 remain planned. Schema head remains 0004. Production deployment, service installation and offsite backup configuration remain separate work; further implementation requires a user request.
+
+## Backend acceptance record — 2026-11-17
+
+- Reviewer: project owner (user).
+- Reviewed repository checkpoint: `0beede6` (`Backend implementation completion`) on `codex/b07-b09-storefront-deploy`.
+- Scope: B00, B01, B02, B03, B04, B05a, B05b, B06, B07, B08 and B09.
+- Explicit review reference: user message in this project chat, “I have reviewed backend changes, it can be marked now”.
+- Result: all backend work-queue items above are `accepted`. This accepts the implemented backend and deployment preparation; it does not authorize deployment or change frontend review statuses.
+- Verification evidence remains the recorded B09 checkpoint: 474 SQLite/MySQL tests, project checks and isolated HTTPS/Nginx backup/restore verification. This status-only update does not claim a new test run.
+- Historical handoffs below preserve their original implementation-time status and references. Any pending backend acceptance language in those snapshots is superseded by this record. Commit/merge/deployment state remains separate from acceptance.
 
 ## B01 handoff
 
