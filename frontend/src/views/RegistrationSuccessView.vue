@@ -41,6 +41,6 @@ onBeforeUnmount(() => { requestId += 1 })
   <main id="main-content" tabindex="-1" class="center-page"><section class="success-panel">
     <p v-if="loading" role="status">Getting your business links…</p>
     <div v-else-if="failure" class="notice notice-error" role="alert"><p>{{ failure }}</p><button class="button button-secondary" @click="load">Try again</button><RouterLink class="inline-link" to="/businesses">Your account</RouterLink></div>
-    <template v-else-if="result"><span class="success-mark" aria-hidden="true">✓</span><p class="eyebrow">HERE’S TO YOUR NEXT CHAPTER</p><h1>Your business<br>has a home online.</h1><p class="section-description">Welcome, {{ result.business.name }}. Keep these links handy.</p><BusinessLinks :business="result.business" :urls="result.urls" /><RouterLink class="button" :to="destination">Go to your owner space →</RouterLink><p class="field-hint">Your owner space is ready. Product management and the customer storefront are coming next.</p></template>
+    <template v-else-if="result"><span class="success-mark" aria-hidden="true">✓</span><p class="eyebrow">HERE’S TO YOUR NEXT CHAPTER</p><h1>Your business<br>has a home online.</h1><p class="section-description">Welcome, {{ result.business.name }}. Keep these links handy.</p><BusinessLinks :business="result.business" :urls="result.urls" /><RouterLink class="button" :to="destination">Go to your owner space →</RouterLink><p class="field-hint">Add your first product as a draft, then publish it when you’re ready for customers.</p></template>
   </section></main>
 </template>

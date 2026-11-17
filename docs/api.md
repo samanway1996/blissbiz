@@ -1,6 +1,6 @@
 # BlissBiz API plan
 
-Contract for the hackathon MVP: register a business, manage its catalog through an owner dashboard, and display published products on a public storefront. Backend APIs through B09 are implemented, including host-based storefronts and deployment preparation. `/api/health`, `/api/ready` and `/media/...` also exist. Business frontend screens remain separate work.
+Contract for the hackathon MVP: register a business, manage its catalog through an owner dashboard, and display published products on a public storefront. Backend APIs through B09 are implemented, including host-based storefronts and deployment preparation. `/api/health`, `/api/ready` and `/media/...` also exist. The Vue frontend through F09 is implemented and awaiting project-owner review.
 
 ## Conventions
 
@@ -196,7 +196,7 @@ curl --resolve happy-bakery.localhost:8000:127.0.0.1 'http://happy-bakery.localh
 curl --resolve happy-bakery.localhost:8000:127.0.0.1 http://happy-bakery.localhost:8000/api/v1/storefront/products/PRODUCT_ID
 ```
 
-Lists use the existing page envelope and decimal-string prices. Draft, deleted, missing or another business's product IDs return `404`, even if a query parameter asks for drafts or supplies another business ID. Business profiles expose name/slug/description, public contact/address, currency and logo_url only. Local Vite forwards Host on `/api` and `/media`; use `<slug>.localhost:5173` where your OS resolves it, or add an explicit local hosts entry. This enables API routing; Vue storefront screens remain unimplemented.
+Lists use the existing page envelope and decimal-string prices. Draft, deleted, missing or another business's product IDs return `404`, even if a query parameter asks for drafts or supplies another business ID. Business profiles expose name/slug/description, public contact/address, currency and logo_url only. Local Vite forwards Host on `/api` and `/media`; use `<slug>.localhost:5173` where your OS resolves it, or add an explicit local hosts entry. The Vue storefront uses these same-host endpoints for the public catalog and detail pages; only published products are displayed.
 
 B09 configuration and operational commands are described in [deployment preparation](../deploy/README.md). Start/restart local backend processes with `make dev-backend` so Uvicorn's own proxy processing is disabled; the app's explicit trusted-proxy policy handles it. Existing env files may omit `TRUSTED_PROXY_IPS` (default empty). Cleanup is dry-run by default; no production services or schedules are enabled automatically.
 

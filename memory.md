@@ -73,3 +73,27 @@ Root cause: The existing watcher did not invalidate Vite’s transformed module 
 Fix: Set `server.watch.usePolling: true` in Vite configuration, and restart an older frontend once with `make dev-frontend`. Do not restart the contributor’s backend to repair frontend caching.
 Verification: Old instance on 5173 still served the old router; a separate temporary polling-enabled instance on 5174 served the new landing/registration/login and live slug feedback. Core checks/build and 26 frontend tests passed. Adoption by the existing 5173 instance awaits the contributor’s restart.
 Reuse hint: Compare the served `/src/router/index.js` with disk before diagnosing a Vue route defect. Keep registration/login on central admin.localhost:5173: other ports/origins are intentionally rejected by backend authentication.
+
+## [2026-11-17] Preserve browser Host explicitly in Vite proxies
+Context: BlissBiz multi-host CSRF and public storefront integration.
+Signal: Direct fixture CSRF bootstrap returned 200 but the same request through Vite returned 403; storefront routing also depends on Host.
+Root cause: Vite’s string proxy shorthand normalizes to changeOrigin=true, replacing the browser Host with the backend target. Auth then sees an untrusted target and storefronts cannot resolve their business.
+Fix: Use object proxies with explicit changeOrigin=false for both /api and /media. Keep exact backend origin checks and host-only cookies unchanged.
+Verification: Two-owner browser flows and real Vite middleware HTTP regression passed; make check passed (254 backend, 41 frontend tests, build/lint). The regression uses Node servers bound to ephemeral ports: Vite port=0 falls back to 5173 and would collide with a contributor’s server.
+Reuse hint: Check both target Host and source Origin when debugging csrf_rejected; do not loosen backend security to repair a proxy rewrite.
+
+## [2026-11-17] Pause child resources when private context clears
+Context: BlissBiz Vue admin logout and tenant/owner transitions.
+Signal: Logout reached login but logged Vue watcher errors reading business.id from null before child views unmounted.
+Root cause: Synchronous resource watchers reacted immediately when the parent cleared the business; Vue had not yet unmounted the children.
+Fix: Nullable source keys pause, abort and reset useResource; use optional business/owner access in keys and effect-scope cleanup. Remount private view state for a changed owner/business.
+Verification: Vue effect-scope regression covers null context, stale completions and disposal; repeated browser logout from editor/list produced zero new Vue/script errors. Project checks passed.
+Reuse hint: Treat parent context removal as a valid reactive state, even with v-if around child RouterView. Cancel stale work before unmount rather than assuming render timing protects a watcher.
+
+## [2026-11-17] Isolate browser fixture cookie hostnames as well as ports
+Context: BlissBiz disposable F09 browser testing.
+Signal: A separate server port alone would still use the same admin.localhost cookie scope as normal development.
+Root cause: Browser cookies are scoped by hostname/path, not TCP port.
+Fix: Run the fixture on f09.localhost / admin.f09.localhost / business.f09.localhost, with its own temporary databases/uploads and matching build-time frontend origins.
+Verification: Two-business browser review and built-app deep-link checks passed on isolated ports 8011/5180. Fixture teardown removed only temporary stores; normal servers on 8000/5173 remained running.
+Reuse hint: Follow the optional fixture commands in README; never weaken cookie domain/origin policy or point fixture persistence at a contributor’s database.

@@ -14,11 +14,19 @@ export function createSiteConfig(location, env = {}) {
   if (!root || !admin) throw new Error('Configure VITE_STOREFRONT_BASE_URL and VITE_ADMIN_BASE_URL before building for this domain.')
   const storefrontOrigin = origin(root)
   const adminOrigin = origin(admin)
-  const publicHost = new URL(storefrontOrigin).hostname
+  const publicBase = new URL(storefrontOrigin)
+  const publicHost = publicBase.hostname
+  const suffix = `.${publicHost}`
+  const candidate = location.hostname.endsWith(suffix) ? location.hostname.slice(0, -suffix.length) : ''
+  const storefrontSlug = /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(candidate) && candidate.length <= 63 ? candidate : null
+  const isStorefront = Boolean(storefrontSlug) && location.origin !== adminOrigin
+    && location.protocol === publicBase.protocol && location.port === publicBase.port
   return {
     storefrontOrigin,
     adminOrigin,
     publicHost,
+    storefrontSlug,
+    isStorefront,
     isAdmin: location.origin === adminOrigin,
     isLanding: location.origin === storefrontOrigin || (local && ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname)),
     adminUrl: path => new URL(path, `${adminOrigin}/`).href,
@@ -27,7 +35,7 @@ export function createSiteConfig(location, env = {}) {
 
 export function safeReturnPath(value) {
   // Return targets are restricted to implemented owner routes; reject external URLs.
-  return typeof value === 'string' && /^\/businesses(?:\/[a-z0-9]+(?:-[a-z0-9]+)*)?$/.test(value)
+  return typeof value === 'string' && /^\/businesses(?:\/[a-z0-9]+(?:-[a-z0-9]+)*(?:\/(?:settings|products(?:\/(?:new|[a-zA-Z0-9-]+\/edit))?))?)?$/.test(value)
     ? value : '/businesses'
 }
 

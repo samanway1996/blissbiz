@@ -10,7 +10,8 @@ export class ApiError extends Error {
 }
 
 export class ApiClient {
-  constructor(fetcher = (...args) => fetch(...args)) {
+  constructor(fetcher = (...args) => fetch(...args), { credentials = 'same-origin' } = {}) {
+    this.credentials = credentials
     this.fetcher = fetcher
     this.csrfRequest = null
     this.unauthorizedListeners = new Set()
@@ -29,7 +30,7 @@ export class ApiClient {
         method,
         body,
         headers: { Accept: 'application/json', ...headers },
-        credentials: 'same-origin',
+        credentials: this.credentials,
         cache: 'no-store',
         signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(10000)]) : AbortSignal.timeout(10000),
       })
