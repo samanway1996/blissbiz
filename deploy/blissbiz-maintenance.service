@@ -1,0 +1,17 @@
+[Unit]
+Description=BlissBiz expired security data and orphan image maintenance
+After=blissbiz.service
+
+[Service]
+Type=oneshot
+User=blissbiz
+Group=blissbiz
+WorkingDirectory=/opt/blissbiz/current/backend
+EnvironmentFile=/etc/blissbiz/backend.env
+ExecStart=/opt/blissbiz/current/backend/.venv/bin/python3 -m app.maintenance --apply --grace-hours 24
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/blissbiz/uploads

@@ -1,0 +1,61 @@
+# Disposable B09 integration stack. Never point at existing volumes or production credentials.
+services:
+  db:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: blissbiz
+      MYSQL_USER: blissbiz
+      MYSQL_PASSWORD: ${TEST_DB_PASSWORD:?}
+      MYSQL_ROOT_PASSWORD: ${TEST_ROOT_PASSWORD:?}
+    volumes: [db_test:/var/lib/mysql]
+    healthcheck:
+      test: [CMD-SHELL, 'MYSQL_PWD="$$MYSQL_PASSWORD" mysql -h 127.0.0.1 -u"$$MYSQL_USER" "$$MYSQL_DATABASE" -e "SELECT 1" >/dev/null 2>&1']
+      interval: 2s
+      timeout: 5s
+      retries: 60
+  backend:
+    build:
+      context: ..
+      dockerfile: deploy/backend.Dockerfile
+      args:
+        PYTHON_IMAGE: ${TEST_PYTHON_IMAGE:-python:3.13-slim}
+    environment:
+      APP_ENV: production
+      DATABASE_URL: mysql+pymysql://blissbiz:${TEST_DB_PASSWORD}@db:3306/blissbiz?charset=utf8mb4
+      STOREFRONT_BASE_URL: https://blissbiz.test:${TEST_HTTPS_PORT}
+      ADMIN_BASE_URL: https://admin.blissbiz.test:${TEST_HTTPS_PORT}
+      AUTH_ALLOWED_ORIGINS: '["https://admin.blissbiz.test:${TEST_HTTPS_PORT}"]'
+      TRUSTED_PROXY_IPS: '["${TEST_PROXY_IP}/32"]'
+      UPLOAD_DIR: /data/uploads
+      REGISTRATION_RATE_LIMIT: 100
+      LOGIN_PEER_RATE_LIMIT: 5
+      LOGIN_ACCOUNT_RATE_LIMIT: 100
+    command: [sh, -c, 'python3 -m alembic upgrade head && exec python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2 --no-proxy-headers']
+    volumes: [uploads_test:/data/uploads]
+    depends_on:
+      db: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, python3, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/ready', timeout=5)"]
+      interval: 2s
+      timeout: 6s
+      retries: 60
+  proxy:
+    image: ${TEST_NGINX_IMAGE:-nginx:stable-alpine}
+    ports: ['127.0.0.1:${TEST_HTTPS_PORT}:443']
+    volumes:
+      - ${TEST_FILES}/site.conf:/etc/nginx/conf.d/default.conf:ro
+      - ${TEST_FILES}/proxy.conf:/etc/nginx/blissbiz-proxy.conf:ro
+      - ${TEST_FILES}/cert.pem:/tls/cert.pem:ro
+      - ${TEST_FILES}/key.pem:/tls/key.pem:ro
+      - ../frontend/dist:/opt/blissbiz/current/frontend/dist:ro
+    networks:
+      default: {ipv4_address: '${TEST_PROXY_IP}'}
+    depends_on:
+      backend: {condition: service_healthy}
+networks:
+  default:
+    ipam:
+      config: [{subnet: '${TEST_SUBNET}'}]
+volumes:
+  db_test:
+  uploads_test:
