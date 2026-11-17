@@ -6,6 +6,8 @@ Fix: Use verified official Node 24 from ignored `.tools/node` through `scripts/n
 Verification: `make setup`, Python checks and tests, Vue build, and live FastAPI-to-MySQL readiness through Vite passed. MySQL runs through Rancher Desktop on localhost port 3307.
 Reuse hint: Use the Make targets and README; do not invoke global npm directly on this Mac. Never delete the MySQL volume to resolve credential drift.
 
+2026-11-17 recovery: Missing `backend/.venv`, `backend/.env` and frontend dependencies prevented startup; the removal cause was not established. Recreate the venv with the supported Homebrew interpreter and rerun `make setup` to restore ignored local artifacts using the preserved root `.env` credentials. Verified 254 tests (one opt-in skip), build/lint and in-process MySQL readiness without starting a server. For future fresh/cleaned checkouts, run `make setup` before development commands.
+
 ## [2026-11-15] Backend reload needs file polling
 Context: BlissBiz local FastAPI development.
 Signal: The running reload-enabled backend continued returning 404 for a newly added route even though in-process API tests passed.
@@ -63,3 +65,11 @@ Root cause: Docker's download path could not validate that CDN's certificate cha
 Fix: Pull the same official Python/Nginx images from Google's documented mirror.gcr.io cache and set TEST_PYTHON_IMAGE / TEST_NGINX_IMAGE for the disposable deployment test. Certificate verification remains enabled. Docker build-cache writes on this host required scoped escalation; no daemon restart or trust-store change was made.
 Verification: The isolated stack built and passed HTTPS/routing/security checks, restart persistence and paired MySQL/image backup + restore. Its generated project/volumes were removed and the normal MySQL container stayed healthy.
 Reuse hint: See deploy/README.md for the image override invocation. Wait briefly for the published HTTPS port after Compose reports Running; do not treat that container status alone as external readiness.
+
+## [2026-11-17] Vite needs polling when transformed modules stay stale
+Context: BlissBiz frontend development on this Mac.
+Signal: The running Vite instance returned the original router after source files changed, while a new instance compiled the new pages correctly.
+Root cause: The existing watcher did not invalidate Vite’s transformed module cache; the underlying native filesystem event failure was not established.
+Fix: Set `server.watch.usePolling: true` in Vite configuration, and restart an older frontend once with `make dev-frontend`. Do not restart the contributor’s backend to repair frontend caching.
+Verification: Old instance on 5173 still served the old router; a separate temporary polling-enabled instance on 5174 served the new landing/registration/login and live slug feedback. Core checks/build and 26 frontend tests passed. Adoption by the existing 5173 instance awaits the contributor’s restart.
+Reuse hint: Compare the served `/src/router/index.js` with disk before diagnosing a Vue route defect. Keep registration/login on central admin.localhost:5173: other ports/origins are intentionally rejected by backend authentication.

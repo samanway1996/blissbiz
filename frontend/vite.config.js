@@ -8,6 +8,7 @@ export default defineConfig({
     allowedHosts: ['.localhost'],
     port: 5173,
     strictPort: true,
+    watch: { usePolling: true },
     proxy: { '/api': 'http://127.0.0.1:8000', '/media': 'http://127.0.0.1:8000' },
   },
 })

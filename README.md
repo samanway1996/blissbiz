@@ -1,6 +1,6 @@
 # BlissBiz
 
-Small-business website platform built with Vue 3 + Vite, FastAPI, and MySQL. Backend APIs through B09 support registration, login/logout, owner settings, product CRUD/publication, image uploads, and hostname-based public storefronts. Business frontend screens remain planned.
+Small-business website platform built with Vue 3 + Vite, FastAPI, and MySQL. Backend APIs through B09 support registration, login/logout, owner settings, product CRUD/publication, image uploads, and hostname-based public storefronts. Frontend F01–F04 adds the landing page, business registration and success screen, owner login/logout, and a protected account page. Settings, catalog management and public storefront screens remain F05–F08 work.
 
 Registration, owner dashboard, and storefront endpoints are documented in [the API plan](docs/api.md).
 
@@ -35,15 +35,32 @@ make dev-backend
 make dev-frontend
 ```
 
-- Frontend: <http://127.0.0.1:5173>
+- Landing page: <http://localhost:5173>
+- Registration: <http://admin.localhost:5173/register>
+- Owner login: <http://admin.localhost:5173/login>
+- Development connection status: <http://localhost:5173/development> (development only)
 - Interactive API documentation: <http://127.0.0.1:8000/api/docs>
 - Backend health: <http://127.0.0.1:8000/api/health>
 - Backend + database readiness: <http://127.0.0.1:8000/api/ready>
 - Session/CSRF bootstrap: <http://127.0.0.1:8000/api/v1/auth/csrf>
 
-The frontend displays connection status for the backend and database. Its `/api` requests are forwarded to FastAPI by Vite, so no separate browser CORS configuration is needed locally. The backend command enables file polling for reliable automatic reloads on this Mac.
+The landing page links to registration on the central admin hostname; owner cookies stay on that hostname. The `/development` page displays connection status for the backend and database. Its `/api` requests are forwarded to FastAPI by Vite, so no separate browser CORS configuration is needed locally. Both backend and Vite use file polling for reliable automatic reloads on this Mac. Restart an older frontend once with Ctrl+C and `make dev-frontend` to adopt this Vite setting if it keeps showing stale pages.
 
 Stop either development server with **Ctrl+C**. Stop MySQL with `make db-stop`; its data remains in a Docker volume. These servers and configuration are for local development only.
+
+## Review frontend F01–F04
+
+Use the two development servers above. Keep registration and login on **admin.localhost:5173**; `localhost`, `127.0.0.1`, and subdomains have separate cookies. If your OS does not resolve local subdomains, add `127.0.0.1 localhost admin.localhost` to your hosts file using your normal administrator workflow. Add business storefront hosts individually when F08 is implemented; hosts files do not support wildcards.
+
+1. Open the landing page. Its bakery is explicitly an **example storefront**. The CTA opens the admin registration form. `/development` retains the original diagnostics.
+2. Register with a unique email and business slug, and a 15–128 character password. The slug check is advisory; taken/reserved names and API field errors appear in the form. Submission creates real local owner/business records. Passwords are cleared after each submitted attempt.
+3. The success page displays the backend-returned dashboard and storefront links, with copy actions. Refreshing recovers the links from the authenticated owner’s businesses. A domain mismatch is shown rather than linking somewhere unexpected.
+4. Open the owner space, refresh, log out, then log back in. Direct unauthenticated visits to `/businesses` or `/businesses/<slug>` return to login. Unknown/non-owned business slugs show a safe error. Only backend ownership checks grant access.
+5. Verify at a narrow browser width and with the keyboard. After logout, browser Back must not reveal authenticated content. The success and owner pages are protected on each navigation. An unavailable API offers a visible error/retry; writes are never automatically replayed.
+
+The signed-in page is intentionally a minimal F04 checkpoint. Business settings/products are not yet available, and the public storefront URL shows an unavailable-page notice until F08. There is no “add another business” flow.
+
+Development uses default public build-time origins without an env file. For a custom domain/port, copy `frontend/.env.example` to `frontend/.env`, adjust the two `VITE_` origins, and restart Vite. **Before a production build**, set `VITE_STOREFRONT_BASE_URL=https://yourdomain.com` and `VITE_ADMIN_BASE_URL=https://admin.yourdomain.com`; match the backend’s `STOREFRONT_BASE_URL`, `ADMIN_BASE_URL`, and exact `AUTH_ALLOWED_ORIGINS`. Rebuild whenever these values change. Vite variables are public and must never contain secrets. A non-local host with missing origins shows a configuration error. Production Nginx already supports Vue deep-link fallback.
 
 ## Setup on another machine
 
@@ -95,7 +112,7 @@ For your IDE, select `backend/.venv/bin/python3` as the Python interpreter and `
 make check
 ```
 
-This runs Python linting, formatting checks, backend tests, and the Vue production build. Default database tests use isolated SQLite databases and do not require MySQL. For the same tests against local MySQL as well:
+This runs Python linting, formatting checks, backend tests, the frontend’s Node built-in behavioral tests, and the Vue production build. No new frontend test dependency is needed. With `backend/.venv` installed, one Node test runs the real FastAPI routes through an in-process Python TestClient and disposable SQLite application/quota stores; it creates no local business data and binds no backend port. That integration test is skipped when the backend environment is absent. The behavioral tests cover shared API/session/redirect/slug logic; they do not replace browser testing of Vue forms. Run only frontend tests with `./scripts/npm.sh --prefix frontend test`, or add `run test:coverage` for core JavaScript coverage (Vue component templates are not included). Default database tests use isolated SQLite databases and do not require MySQL. For the same tests against local MySQL as well:
 
 ```sh
 make db-up

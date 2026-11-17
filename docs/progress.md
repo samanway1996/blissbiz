@@ -28,10 +28,10 @@ Code completion, user acceptance, and merging are separate facts. Record merge r
 | B07 | Host resolution and public business profile | accepted | Codex; `codex/b07-b09-storefront-deploy` | Strict Host resolution and public-only profile; malformed/unknown/forwarded-host cases pass. |
 | B08 | Public product catalog | accepted | Codex; `codex/b07-b09-storefront-deploy` | Published-only, tenant-scoped list/detail/search/pagination; draft, deleted and cross-business IDs return 404. |
 | B09 | Backend integration and deployment preparation | accepted | Codex; `codex/b07-b09-storefront-deploy` | 474 SQLite/MySQL tests; isolated verified-HTTPS Nginx/two-worker integration, restart persistence and backup/restore passed. No production deployment. |
-| F01 | Landing page and CTA | planned | Unassigned | After F00 acceptance and authorization. |
-| F02 | Shared client and session handling | planned | Unassigned | F00, B01. |
-| F03 | Registration form and success page | planned | Unassigned | F01, F02, B02. |
-| F04 | Login/logout and protected navigation | planned | Unassigned | F02, B03. |
+| F01 | Landing page and CTA | review | Codex; `codex/f01-f04-onboarding` | Implemented through F04; 26 frontend tests (including real FastAPI flow), 254 backend tests, lint/format and build pass. See combined handoff; normal-port browser review awaits frontend restart. |
+| F02 | Shared client and session handling | review | Codex; `codex/f01-f04-onboarding` | Implemented through F04; 26 frontend tests (including real FastAPI flow), 254 backend tests, lint/format and build pass. See combined handoff; normal-port browser review awaits frontend restart. |
+| F03 | Registration form and success page | review | Codex; `codex/f01-f04-onboarding` | Implemented through F04; 26 frontend tests (including real FastAPI flow), 254 backend tests, lint/format and build pass. See combined handoff; normal-port browser review awaits frontend restart. |
+| F04 | Login/logout and protected navigation | review | Codex; `codex/f01-f04-onboarding` | Implemented through F04; 26 frontend tests (including real FastAPI flow), 254 backend tests, lint/format and build pass. See combined handoff; normal-port browser review awaits frontend restart. |
 | F05 | Business admin/settings | planned | Unassigned | F04, B04. |
 | F06a | Product listing and creation | planned | Unassigned | F05, B05a. |
 | F06b | Product editing and publication | planned | Unassigned | F06a, B05b. |
@@ -47,8 +47,8 @@ Resolve each when its task is claimed; none blocks reviewing the existing implem
 | --- | --- |
 | B01 defines 15-minute anonymous/8-hour owner sessions, rotation, exact admin origins, and secure production cookies; review [the contract](session-security.md) | B01 acceptance |
 | SQL-backed fixed-window limits: registration 5 per peer; login 20 per peer and 5 per normalized account, each per 900 seconds by default. See [API configuration](api.md#basic-authentication-requests). | Review limits and actual proxy addresses before production; B09 handling is implemented. |
-| Frontend component library, if any; otherwise continue with existing CSS | F01 implementation |
-| Frontend lint/format and automated UI testing tools | Adding those checks; discuss dependencies first |
+| Resolved for F01–F04: use existing Vue and plain CSS; no component library or state manager. | Revisit only if a later task needs a library. |
+| User approved Node’s built-in runner for core logic and API integration (no dependency). Component/browser automation and JS lint/format tools remain unselected. | Discuss before adding tools; manual browser review remains required. |
 | Central admin and slug-based API host routing are implemented; confirm the real production domain and verify local DNS on each OS | F01 navigation/B01 origin integration, finalized by B07 |
 | Persistent storage and validation are implemented; B09 adds dry-run/apply expired-security/orphan cleanup and optional service/timer examples. Nothing schedules local deletion automatically. | Production maintenance/backup setup before deployment |
 | Exact GoDaddy product, production domain, DNS/HTTPS, proxy, and backup setup | B09 preparation; deployment requires separate authorization |
@@ -80,7 +80,7 @@ Next eligible task (requires authorization):
 
 ## Current checkpoint
 
-Backend tasks B00–B09 (including B05a/B05b) are accepted by the project owner on 2026-11-17. Backend APIs, proxy handling, maintenance and deployment preparation are implemented and locally verified. Frontend statuses are unchanged: F00 awaits review and F01–F09 remain planned. Schema head remains 0004. Production deployment, service installation and offsite backup configuration remain separate work; further implementation requires a user request.
+Backend tasks B00–B09 (including B05a/B05b) are accepted by the project owner on 2026-11-17. Backend APIs, proxy handling, maintenance and deployment preparation are implemented and locally verified. F01–F04 are implemented and in `review` on `codex/f01-f04-onboarding`; explicit acceptance is pending. The user authorized this combined iteration through F04. F00 retains its existing review status; F05–F09 remain planned. Schema head remains 0004. Production deployment, service installation and offsite backup configuration remain separate work; further implementation requires a user request.
 
 ## Backend acceptance record — 2026-11-17
 
@@ -170,3 +170,22 @@ Historical B01 checkpoint; the B02 handoff below describes the current implement
 - Limits/external verification: real GoDaddy domain/DNS, public certificate issuance/renewal, firewall and systemd installation, off-VM backup delivery and final host-specific paths still require the intended VPS and deployment authorization. ARM64 local container verification does not certify the eventual server environment.
 - Usage: docs/api.md has public GET/curl examples; deploy/README.md documents configuration, maintenance, backups/recovery and the reproducible make test-deployment check. No separate verification document was created.
 - Acceptance/merge: pending; no commit, PR, merge or production deployment created. Frontend remains its development starter; choose a frontend slice only on user request.
+
+## F01–F04 handoff — 2026-11-17
+
+- Task/status: F01 landing, F02 client/session, F03 registration/success, F04 login/logout/protected navigation; `review`, acceptance pending.
+- Contributor/reference: Codex; `codex/f01-f04-onboarding`, uncommitted. Existing `memory.md` recovery note was preserved. No commit, PR or deployment created.
+- Authorization: user requested implementation through F04, then verification and review. This permits building on F00 without marking it accepted; F05–F09 remain planned.
+- Owned files: `frontend/src/` pages/components, API client, session/site composables, domain/slug/business services and router; frontend styles/index/environment example/Vite config; Node tests and disposable Python API adapter; Makefile, README, deploy README and tracker. Backend application/schema/dependencies and real environment files are unchanged.
+- F01: responsive landing with an explicitly labeled example storefront, central-admin registration/login links, and `/development` diagnostics retained only in development.
+- F02: shared JSON/multipart client, same-origin cookies, empty 204 responses, safe structured errors/Retry-After/cancellation, in-flight CSRF bootstrap deduplication and fresh bootstrap before mutations. No automatic mutation replay. Reactive owner session stays in memory; changing/restoring cookie owners discards stale registration data. No tokens/passwords in browser storage.
+- F03: owner/business form, backend-aligned password/slug limits, debounced availability with cancellation/version checks, field/global errors, disabled duplicate submissions, password clearing, and protected success page. Displays API-returned business URLs only if they agree with configured origins; copy actions, refresh recovery and safe unknown/non-owned state are implemented.
+- F04: login/logout, `/auth/me` restoration and protected route guards, central-host redirects and restricted relative return targets. `/businesses` and `/businesses/:slug` provide a minimal signed-in checkpoint with owned URLs, not the F05 settings/admin shell. Logout/401 clears identity; unavailable API and failed logout remain recoverable.
+- Host/config: local default landing `http://localhost:5173`, central admin `http://admin.localhost:5173`; public business hosts show an unavailable-page notice until F08. Production builds require public `VITE_STOREFRONT_BASE_URL` / `VITE_ADMIN_BASE_URL` matching backend URLs/origins. No CORS/cookie scope/security policies were weakened. Vite now polls files because the existing instance kept returning cached old modules.
+- Verification: `make check` passed: Python Ruff lint/format (including the API adapter), 254 backend tests plus 1 expected opt-in MySQL skip, 26 frontend tests with no skips, and Vue production build. `git diff --check` passed. Existing Starlette TestClient deprecation warning remains.
+- Integration evidence: the actual JS ApiClient and session store completed real FastAPI registration, profile restoration, logout/login, changed CSRF token, owned URL recovery, missing business, unauthorized access, duplicate slug/email and invalid login. This uses in-process TestClient cookies and separate temporary SQLite application/quota stores; no backend server or persistent business data is created.
+- Coverage: Node reported 99.27% lines / 93.96% branches across the six imported core JavaScript modules. This excludes Vue SFC templates and application/router mounting; it is not full UI coverage.
+- Browser evidence: an independent temporary Vite preview on port 5174 showed the new landing and registration/login screens, correct central-host CTA, live reserved-slug feedback, narrow login width without horizontal overflow (320px), and desktop layout dimensions. No credentials/business registration were submitted through that preview, since port 5174 is intentionally outside backend auth origins. Review screenshot is outside the repository. The temporary preview was stopped after verification.
+- Runtime/manual review limit: the contributor-owned frontend on 5173 still served the old router despite source edits; user was asked to restart only that frontend with Ctrl+C / `make dev-frontend`. Full browser registration/refresh/logout/login on the normal allowed origin remains for review after restart. Existing backend and frontend processes were not stopped or restarted by Codex.
+- Review: follow the short F01–F04 section in README. Register a unique local test owner/business, inspect both URLs, refresh success/account, logout/login, and verify protected navigation. Manual registration intentionally creates local records. Product/settings editing, image UI, storefront UI and F09 browser integration remain later work.
+- Acceptance/merge: pending explicit user review; no next iteration started. Next eligible task after review/authorization: F05.

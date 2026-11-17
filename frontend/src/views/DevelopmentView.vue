@@ -18,7 +18,7 @@ onMounted(checkConnections)
 </script>
 
 <template>
-  <main>
+  <main id="main-content" tabindex="-1" class="development-page">
     <p class="eyebrow">BLISSBIZ · LOCAL DEVELOPMENT</p>
     <h1>Your workspace starts here.</h1>
     <p>Vue is running. Check the connections below before building your first feature.</p>

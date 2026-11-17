@@ -12,7 +12,8 @@ dev-backend:
 dev-frontend:
 	./scripts/npm.sh --prefix frontend run dev
 check:
-	cd backend && .venv/bin/python3 -m ruff check . ../scripts/test_deployment.py && .venv/bin/python3 -m ruff format --check . ../scripts/test_deployment.py && .venv/bin/python3 -m pytest
+	cd backend && .venv/bin/python3 -m ruff check . ../scripts/test_deployment.py ../frontend/tests/support && .venv/bin/python3 -m ruff format --check . ../scripts/test_deployment.py ../frontend/tests/support && .venv/bin/python3 -m pytest
+	./scripts/npm.sh --prefix frontend test
 	./scripts/npm.sh --prefix frontend run build
 test-mysql:
 	cd backend && BLISSBIZ_TEST_MYSQL=1 .venv/bin/python3 -m pytest
