@@ -1,6 +1,6 @@
 # BlissBiz
 
-Small-business website platform built with Vue 3 + Vite, FastAPI, and MySQL. Backend APIs through B09 support registration, login/logout, owner settings, product CRUD/publication, image uploads, and hostname-based public storefronts. Business frontend screens remain planned.
+Small-business website platform built with Vue 3 + Vite, FastAPI, and MySQL. Backend APIs through B09 support registration, login/logout, owner settings, product CRUD/publication, image uploads, and hostname-based public storefronts. Frontend F01–F09 implements the landing page, registration, owner login, business settings, product/image management, and hostname-based public storefronts. The implementation is ready for project-owner review; production deployment is separate.
 
 Registration, owner dashboard, and storefront endpoints are documented in [the API plan](docs/api.md).
 
@@ -35,15 +35,61 @@ make dev-backend
 make dev-frontend
 ```
 
-- Frontend: <http://127.0.0.1:5173>
+- Landing page: <http://localhost:5173>
+- Registration: <http://admin.localhost:5173/register>
+- Owner login: <http://admin.localhost:5173/login>
+- Development connection status: <http://localhost:5173/development> (development only)
 - Interactive API documentation: <http://127.0.0.1:8000/api/docs>
 - Backend health: <http://127.0.0.1:8000/api/health>
 - Backend + database readiness: <http://127.0.0.1:8000/api/ready>
 - Session/CSRF bootstrap: <http://127.0.0.1:8000/api/v1/auth/csrf>
 
-The frontend displays connection status for the backend and database. Its `/api` requests are forwarded to FastAPI by Vite, so no separate browser CORS configuration is needed locally. The backend command enables file polling for reliable automatic reloads on this Mac.
+The landing page links to registration on the central admin hostname; owner cookies stay on that hostname. The `/development` page displays connection status for the backend and database. Its `/api` requests are forwarded to FastAPI by Vite, so no separate browser CORS configuration is needed locally. Both backend and Vite use file polling for reliable automatic reloads on this Mac. Restart an older frontend once with Ctrl+C and `make dev-frontend` to adopt this Vite setting if it keeps showing stale pages.
 
 Stop either development server with **Ctrl+C**. Stop MySQL with `make db-stop`; its data remains in a Docker volume. These servers and configuration are for local development only.
+
+## Review frontend F01–F04
+
+Use the two development servers above. Keep registration and login on **admin.localhost:5173**; `localhost`, `127.0.0.1`, and subdomains have separate cookies. If your OS does not resolve local subdomains, add `127.0.0.1 localhost admin.localhost` to your hosts file using your normal administrator workflow. Add any business storefront hosts you use individually; hosts files do not support wildcards.
+
+1. Open the landing page. Its bakery is explicitly an **example storefront**. The CTA opens the admin registration form. `/development` retains the original diagnostics.
+2. Register with a unique email and business slug, and a 15–128 character password. The slug check is advisory; taken/reserved names and API field errors appear in the form. Submission creates real local owner/business records. Passwords are cleared after each submitted attempt.
+3. The success page displays the backend-returned dashboard and storefront links, with copy actions. Refreshing recovers the links from the authenticated owner’s businesses. A domain mismatch is shown rather than linking somewhere unexpected.
+4. Open the owner space, refresh, log out, then log back in. Direct unauthenticated visits to `/businesses` or `/businesses/<slug>` return to login. Unknown/non-owned business slugs show a safe error. Only backend ownership checks grant access.
+5. Verify at a narrow browser width and with the keyboard. After logout, browser Back must not reveal authenticated content. The success and owner pages are protected on each navigation. An unavailable API offers a visible error/retry; writes are never automatically replayed.
+
+The owner space now links to the full catalog/settings pages described below. There is no “add another business” registration flow.
+
+Development uses default public build-time origins without an env file. For a custom domain/port, copy `frontend/.env.example` to `frontend/.env`, adjust the two `VITE_` origins, and restart Vite. **Before a production build**, set `VITE_STOREFRONT_BASE_URL=https://yourdomain.com` and `VITE_ADMIN_BASE_URL=https://admin.yourdomain.com`; match the backend’s `STOREFRONT_BASE_URL`, `ADMIN_BASE_URL`, and exact `AUTH_ALLOWED_ORIGINS`. Rebuild whenever these values change. Vite variables are public and must never contain secrets. A non-local host with missing origins shows a configuration error. Production Nginx already supports Vue deep-link fallback.
+
+## Review frontend F05–F09
+
+Use your existing business or register one, then:
+
+1. Open `http://admin.localhost:5173/businesses/<slug>`; choose **Business settings**, update public details, and upload a logo. Slug and currency stay read-only.
+2. Choose **Products → Add product**, enter a name/description and a price such as `499.00`, then **Create draft**. On the edit page, select a JPEG/PNG/WebP file and choose **Upload image**. Images are saved separately from text edits; the server validates type, 5 MiB size and 20 MP limits.
+3. Set **Visibility → Published** and save. Open `http://<slug>.localhost:5173`; search the catalog and open a product. Drafts do not appear. Set the product back to Draft and confirm its public detail is unavailable after refresh.
+4. Verify search/status filters, pagination, image replacement/removal, delete confirmation, and logout/login. Replacing a photo preserves unsaved text edits. Failed saves retain the form. Manual edits/deletions affect your real local data; use the optional fixture below for disposable review.
+
+Business lists are paginated; owner navigation resolves the slug through authorized API results. Every API still checks ownership. Public pages use their actual hostname and omit cookies; unknown businesses and unavailable products have dedicated error states. Images themselves remain public even for drafts, as specified by the backend contract. Empty/loading/error states include useful next actions. Deletion requires an explicit confirmation.
+
+The existing Node test runner covers exact decimal strings, changed-field PATCHes, stale results, logout cleanup, image preview cleanup, two-owner isolation, public-only catalog/search/pagination, upload/replace/remove, and real Vite Host forwarding. It uses ephemeral HTTP ports and temporary SQLite/upload storage. No new frontend framework/dependency is required. Browser checks remain manual; the in-process API tests do not execute Vue templates.
+
+For a disposable browser review, run these in **two separate terminals** from the project root:
+
+```sh
+# Isolated backend: temporary SQLite + uploads; never your normal MySQL.
+backend/.venv/bin/python3 frontend/tests/support/browser_server.py --port 8011 --frontend-port 5180
+```
+
+```sh
+BLISSBIZ_TEST_API_TARGET=http://127.0.0.1:8011 \
+VITE_STOREFRONT_BASE_URL=http://f09.localhost:5180 \
+VITE_ADMIN_BASE_URL=http://admin.f09.localhost:5180 \
+./scripts/npm.sh --prefix frontend run dev -- --port 5180
+```
+
+Open `http://f09.localhost:5180`; register two dummy businesses with different owners. Use their returned URLs to repeat the flow and verify that the second owner cannot access the first owner’s admin routes or products. The separate `f09.localhost` names keep fixture cookies apart from normal `admin.localhost`; changing only the port would not isolate cookies. If needed, add explicit loopback hosts entries for these fixture names. Stop both fixture terminals with Ctrl+C; stopping the fixture backend removes only its temporary stores/uploads. Restarting it creates a new empty test environment. The normal backend/frontend on ports 8000/5173 remain independent.
 
 ## Setup on another machine
 
@@ -95,7 +141,7 @@ For your IDE, select `backend/.venv/bin/python3` as the Python interpreter and `
 make check
 ```
 
-This runs Python linting, formatting checks, backend tests, and the Vue production build. Default database tests use isolated SQLite databases and do not require MySQL. For the same tests against local MySQL as well:
+This runs Python linting, formatting checks, backend tests, the frontend’s Node built-in behavioral tests, and the Vue production build. No new frontend test dependency is needed. With `backend/.venv` installed, Node integration tests run the real FastAPI routes through an in-process Python TestClient and disposable SQLite application/quota stores; it creates no local business data and binds no backend port. Those integration tests are skipped when the backend environment is absent. The behavioral tests cover shared API/session/redirect/slug logic; they do not replace browser testing of Vue forms. Run only frontend tests with `./scripts/npm.sh --prefix frontend test`, or add `run test:coverage` for core JavaScript coverage (Vue component templates are not included). Default database tests use isolated SQLite databases and do not require MySQL. For the same tests against local MySQL as well:
 
 ```sh
 make db-up

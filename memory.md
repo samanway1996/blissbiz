@@ -6,6 +6,8 @@ Fix: Use verified official Node 24 from ignored `.tools/node` through `scripts/n
 Verification: `make setup`, Python checks and tests, Vue build, and live FastAPI-to-MySQL readiness through Vite passed. MySQL runs through Rancher Desktop on localhost port 3307.
 Reuse hint: Use the Make targets and README; do not invoke global npm directly on this Mac. Never delete the MySQL volume to resolve credential drift.
 
+2026-11-17 recovery: Missing `backend/.venv`, `backend/.env` and frontend dependencies prevented startup; the removal cause was not established. Recreate the venv with the supported Homebrew interpreter and rerun `make setup` to restore ignored local artifacts using the preserved root `.env` credentials. Verified 254 tests (one opt-in skip), build/lint and in-process MySQL readiness without starting a server. For future fresh/cleaned checkouts, run `make setup` before development commands.
+
 ## [2026-11-15] Backend reload needs file polling
 Context: BlissBiz local FastAPI development.
 Signal: The running reload-enabled backend continued returning 404 for a newly added route even though in-process API tests passed.
@@ -63,3 +65,35 @@ Root cause: Docker's download path could not validate that CDN's certificate cha
 Fix: Pull the same official Python/Nginx images from Google's documented mirror.gcr.io cache and set TEST_PYTHON_IMAGE / TEST_NGINX_IMAGE for the disposable deployment test. Certificate verification remains enabled. Docker build-cache writes on this host required scoped escalation; no daemon restart or trust-store change was made.
 Verification: The isolated stack built and passed HTTPS/routing/security checks, restart persistence and paired MySQL/image backup + restore. Its generated project/volumes were removed and the normal MySQL container stayed healthy.
 Reuse hint: See deploy/README.md for the image override invocation. Wait briefly for the published HTTPS port after Compose reports Running; do not treat that container status alone as external readiness.
+
+## [2026-11-17] Vite needs polling when transformed modules stay stale
+Context: BlissBiz frontend development on this Mac.
+Signal: The running Vite instance returned the original router after source files changed, while a new instance compiled the new pages correctly.
+Root cause: The existing watcher did not invalidate Vite’s transformed module cache; the underlying native filesystem event failure was not established.
+Fix: Set `server.watch.usePolling: true` in Vite configuration, and restart an older frontend once with `make dev-frontend`. Do not restart the contributor’s backend to repair frontend caching.
+Verification: Old instance on 5173 still served the old router; a separate temporary polling-enabled instance on 5174 served the new landing/registration/login and live slug feedback. Core checks/build and 26 frontend tests passed. Adoption by the existing 5173 instance awaits the contributor’s restart.
+Reuse hint: Compare the served `/src/router/index.js` with disk before diagnosing a Vue route defect. Keep registration/login on central admin.localhost:5173: other ports/origins are intentionally rejected by backend authentication.
+
+## [2026-11-17] Preserve browser Host explicitly in Vite proxies
+Context: BlissBiz multi-host CSRF and public storefront integration.
+Signal: Direct fixture CSRF bootstrap returned 200 but the same request through Vite returned 403; storefront routing also depends on Host.
+Root cause: Vite’s string proxy shorthand normalizes to changeOrigin=true, replacing the browser Host with the backend target. Auth then sees an untrusted target and storefronts cannot resolve their business.
+Fix: Use object proxies with explicit changeOrigin=false for both /api and /media. Keep exact backend origin checks and host-only cookies unchanged.
+Verification: Two-owner browser flows and real Vite middleware HTTP regression passed; make check passed (254 backend, 41 frontend tests, build/lint). The regression uses Node servers bound to ephemeral ports: Vite port=0 falls back to 5173 and would collide with a contributor’s server.
+Reuse hint: Check both target Host and source Origin when debugging csrf_rejected; do not loosen backend security to repair a proxy rewrite.
+
+## [2026-11-17] Pause child resources when private context clears
+Context: BlissBiz Vue admin logout and tenant/owner transitions.
+Signal: Logout reached login but logged Vue watcher errors reading business.id from null before child views unmounted.
+Root cause: Synchronous resource watchers reacted immediately when the parent cleared the business; Vue had not yet unmounted the children.
+Fix: Nullable source keys pause, abort and reset useResource; use optional business/owner access in keys and effect-scope cleanup. Remount private view state for a changed owner/business.
+Verification: Vue effect-scope regression covers null context, stale completions and disposal; repeated browser logout from editor/list produced zero new Vue/script errors. Project checks passed.
+Reuse hint: Treat parent context removal as a valid reactive state, even with v-if around child RouterView. Cancel stale work before unmount rather than assuming render timing protects a watcher.
+
+## [2026-11-17] Isolate browser fixture cookie hostnames as well as ports
+Context: BlissBiz disposable F09 browser testing.
+Signal: A separate server port alone would still use the same admin.localhost cookie scope as normal development.
+Root cause: Browser cookies are scoped by hostname/path, not TCP port.
+Fix: Run the fixture on f09.localhost / admin.f09.localhost / business.f09.localhost, with its own temporary databases/uploads and matching build-time frontend origins.
+Verification: Two-business browser review and built-app deep-link checks passed on isolated ports 8011/5180. Fixture teardown removed only temporary stores; normal servers on 8000/5173 remained running.
+Reuse hint: Follow the optional fixture commands in README; never weaken cookie domain/origin policy or point fixture persistence at a contributor’s database.
