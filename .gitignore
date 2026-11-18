@@ -13,4 +13,5 @@
 **/node_modules/
 frontend/dist/
 backend/uploads/
-
+deploy/vps.env
+deploy/tls/

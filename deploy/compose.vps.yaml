@@ -1,0 +1,105 @@
+# Run through scripts/vps-compose.sh; never use compose.test.yaml on the VPS.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: '3'
+
+x-backend: &backend
+  image: blissbiz-backend:${RELEASE_TAG:-local}
+  build:
+    context: ..
+    dockerfile: deploy/backend.Dockerfile
+    args:
+      PYTHON_IMAGE: ${PYTHON_IMAGE:-python:3.13-slim}
+  environment:
+    APP_ENV: production
+    # Initialization generates URL-safe hex passwords.
+    DATABASE_URL: mysql+pymysql://blissbiz:${MYSQL_PASSWORD:?Run scripts/vps-init.sh}@db:3306/blissbiz?charset=utf8mb4
+    STOREFRONT_BASE_URL: https://blissbiz.biz
+    ADMIN_BASE_URL: https://admin.blissbiz.biz
+    AUTH_ALLOWED_ORIGINS: '["https://admin.blissbiz.biz"]'
+    TRUSTED_PROXY_IPS: '["${PROXY_IP:-172.30.84.10}/32"]'
+    UPLOAD_DIR: /data/uploads
+  volumes:
+    - uploads:/data/uploads
+  networks:
+    - default
+  logging: *logging
+
+services:
+  db:
+    image: ${MYSQL_IMAGE:-mysql:8.4}
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: blissbiz
+      MYSQL_USER: blissbiz
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Run scripts/vps-init.sh}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Run scripts/vps-init.sh}
+    volumes:
+      - database:/var/lib/mysql
+    healthcheck:
+      test: [CMD-SHELL, 'MYSQL_PWD="$$MYSQL_PASSWORD" mysql --protocol=TCP -h 127.0.0.1 -u"$$MYSQL_USER" "$$MYSQL_DATABASE" -e "SELECT 1" >/dev/null 2>&1']
+      interval: 5s
+      timeout: 5s
+      retries: 60
+      start_period: 30s
+    logging: *logging
+
+  migrate:
+    <<: *backend
+    profiles: [tools]
+    restart: 'no'
+    command: [python3, -m, alembic, upgrade, head]
+    depends_on:
+      db: {condition: service_healthy}
+
+  backend:
+    <<: *backend
+    restart: unless-stopped
+    depends_on:
+      db: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, python3, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/ready', timeout=5)"]
+      interval: 5s
+      timeout: 6s
+      retries: 30
+      start_period: 15s
+
+  proxy:
+    image: blissbiz-frontend:${RELEASE_TAG:-local}
+    build:
+      context: ..
+      dockerfile: deploy/frontend.Dockerfile
+      args:
+        NODE_IMAGE: ${NODE_IMAGE:-node:24-alpine}
+        NGINX_IMAGE: ${NGINX_IMAGE:-nginx:stable-alpine}
+    restart: unless-stopped
+    ports:
+      - '${BIND_ADDRESS:-0.0.0.0}:${HTTP_PORT:-80}:80'
+      - '${BIND_ADDRESS:-0.0.0.0}:${HTTPS_PORT:-443}:443'
+    volumes:
+      - type: bind
+        source: ${TLS_DIR:-./tls}
+        target: /tls
+        read_only: true
+        bind:
+          create_host_path: false
+    networks:
+      default:
+        ipv4_address: ${PROXY_IP:-172.30.84.10}
+    depends_on:
+      backend: {condition: service_healthy}
+    logging: *logging
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: ${NETWORK_SUBNET:-172.30.84.0/24}
+
+# Docker-managed persistent storage, independent of the checkout and image lifecycle.
+# Never use `down --volumes` on the VPS.
+volumes:
+  database:
+  uploads:
