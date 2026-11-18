@@ -9,3 +9,8 @@
 .tools
 backend/uploads
 backend/tests
+frontend/dist
+deploy/vps.env
+deploy/tls
+**/*.pem
+**/*.key

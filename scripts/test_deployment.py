@@ -1,11 +1,16 @@
 """Run with backend/.venv/bin/python3 scripts/test_deployment.py after the Vue build.
 
+Use --vps to build and exercise the VPS images instead of a prebuilt local frontend.
+
 Owns and removes only a freshly generated Compose project and disposable test volumes.
 """
 
+import argparse
 import hashlib
 import io
+import json
 import os
+import re
 import secrets
 import shutil
 import socket
@@ -23,14 +28,22 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--vps", action="store_true", help="Exercise the actual VPS Compose/images."
+    )
+    vps = parser.parse_args().vps
     docker = shutil.which("docker") or str(Path.home() / ".rd/bin/docker")
-    if not Path(docker).exists() or not (ROOT / "frontend/dist/index.html").exists():
+    if not Path(docker).exists() or (not vps and not (ROOT / "frontend/dist/index.html").exists()):
         raise SystemExit("Docker and a built frontend are required. Run make check first.")
     project = f"blissbiz-test-{uuid4().hex[:12]}"
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))
         port = probe.getsockname()[1]
     network = f"10.251.{secrets.randbelow(250) + 1}"
+    domain = "blissbiz.biz" if vps else "blissbiz.test"
+    port_suffix = "" if vps else f":{port}"
+    login_limit = 20 if vps else 5
     with tempfile.TemporaryDirectory(prefix="blissbiz-deploy-") as temporary:
         files = Path(temporary)
         env = {
@@ -45,6 +58,28 @@ def main():
             "TEST_PROXY_IP": f"{network}.10",
         }
         env["PATH"] = str(Path(docker).parent) + os.pathsep + env.get("PATH", "")
+        if vps:
+            with socket.socket() as http_probe:
+                http_probe.bind(("127.0.0.1", 0))
+                http_port = http_probe.getsockname()[1]
+            env.update(
+                {
+                    "COMPOSE_FILE": str(ROOT / "deploy/compose.vps.yaml"),
+                    "MYSQL_PASSWORD": env["TEST_DB_PASSWORD"],
+                    "MYSQL_ROOT_PASSWORD": env["TEST_ROOT_PASSWORD"],
+                    "BIND_ADDRESS": "127.0.0.1",
+                    "HTTP_PORT": str(http_port),
+                    "HTTPS_PORT": str(port),
+                    "NETWORK_SUBNET": env["TEST_SUBNET"],
+                    "PROXY_IP": env["TEST_PROXY_IP"],
+                    "TLS_DIR": str(files),
+                    "RELEASE_TAG": project,
+                    "PYTHON_IMAGE": os.environ.get("TEST_PYTHON_IMAGE", "python:3.13-slim"),
+                    "NGINX_IMAGE": os.environ.get("TEST_NGINX_IMAGE", "nginx:stable-alpine"),
+                    "NODE_IMAGE": os.environ.get("TEST_NODE_IMAGE", "node:24-alpine"),
+                    "MYSQL_IMAGE": os.environ.get("TEST_MYSQL_IMAGE", "mysql:8.4"),
+                }
+            )
 
         def compose(*args, capture=False, input=None):
             return subprocess.run(
@@ -72,9 +107,9 @@ def main():
                 "-out",
                 str(files / "cert.pem"),
                 "-subj",
-                "/CN=blissbiz.test",
+                f"/CN={domain}",
                 "-addext",
-                "subjectAltName=DNS:blissbiz.test,DNS:*.blissbiz.test",
+                f"subjectAltName=DNS:{domain},DNS:*.{domain}",
             ],
             check=True,
             stdout=subprocess.DEVNULL,
@@ -88,21 +123,46 @@ def main():
         (files / "proxy.conf").write_text(
             (ROOT / "deploy/nginx/proxy.conf").read_text().replace("127.0.0.1:8000", "backend:8000")
         )
+        if vps:
+            shutil.copyfile(files / "cert.pem", files / "fullchain.pem")
+            shutil.copyfile(files / "key.pem", files / "privkey.pem")
         original_dns = socket.getaddrinfo
 
         def local_dns(host, *args, **kwargs):
             if isinstance(host, bytes):
                 host = host.decode()
-            if host.endswith(".blissbiz.test") or host == "blissbiz.test":
+            if host.endswith(f".{domain}") or host == domain:
                 host = "127.0.0.1"
+                if vps and args and args[0] == 443:
+                    args = (port, *args[1:])
             return original_dns(host, *args, **kwargs)
 
         try:
-            compose("up", "-d", "--build", "--wait", "--wait-timeout", "240")
+            if vps:
+                compose("build", "backend", "proxy")
+                compose("up", "-d", "--wait", "--wait-timeout", "240", "db")
+                compose("run", "--rm", "--no-deps", "migrate")
+            compose("up", "-d", "--wait", "--wait-timeout", "240", *([] if vps else ["--build"]))
+            if vps:
+                for service in ("db", "backend"):
+                    container_id = (
+                        compose("ps", "-q", service, capture=True).stdout.decode().strip()
+                    )
+                    bindings = subprocess.check_output(
+                        [
+                            docker,
+                            "inspect",
+                            "--format",
+                            "{{json .HostConfig.PortBindings}}",
+                            container_id,
+                        ],
+                        env=env,
+                    )
+                    assert not json.loads(bindings), f"{service} has published ports"
             compose("exec", "-T", "proxy", "nginx", "-t")
             socket.getaddrinfo = local_dns
             tls = ssl.create_default_context(cafile=str(files / "cert.pem"))
-            admin = f"https://admin.blissbiz.test:{port}"
+            admin = f"https://admin.{domain}{port_suffix}"
             with httpx.Client(base_url=admin, verify=tls, trust_env=False, timeout=30) as owner:
                 # Port forwarding can become ready slightly after Compose reports Running.
                 for _ in range(60):
@@ -117,6 +177,36 @@ def main():
                 assert owner.get("/api/ready").status_code == 200
                 assert owner.get("/api/docs").status_code == 404
                 assert owner.get("/businesses/example/deep-link").status_code == 200
+                if vps:
+                    html = owner.get("/login").text
+                    scripts = re.findall(r'(?:src|href)="(/assets/[^\"]+\.js)"', html)
+                    assert scripts, "Built frontend has no script assets"
+                    asset_root = "/opt/blissbiz/current/frontend/dist"
+                    # Vite also emits lazy-loaded chunks, including the app's origin settings.
+                    paths = (
+                        compose(
+                            "exec",
+                            "-T",
+                            "proxy",
+                            "find",
+                            f"{asset_root}/assets",
+                            "-type",
+                            "f",
+                            "-name",
+                            "*.js",
+                            capture=True,
+                        )
+                        .stdout.decode()
+                        .splitlines()
+                    )
+                    scripts.extend(path.removeprefix(asset_root) for path in paths)
+                    bundles = []
+                    for asset in scripts:
+                        response = owner.get(asset)
+                        assert response.status_code == 200
+                        assert "javascript" in response.headers["content-type"]
+                        bundles.append(response.text)
+                    assert "https://admin.blissbiz.biz" in "".join(bundles)
 
                 def csrf(client=owner):
                     response = client.get("/api/v1/auth/csrf")
@@ -198,7 +288,7 @@ def main():
                     assert owner.get(second_base).status_code == 404
                     assert second_owner.get(base).status_code == 404
                 with httpx.Client(
-                    base_url=f"https://bakery.blissbiz.test:{port}",
+                    base_url=f"https://bakery.{domain}{port_suffix}",
                     verify=tls,
                     trust_env=False,
                     timeout=30,
@@ -211,7 +301,7 @@ def main():
                         customer.get(f"/api/v1/storefront/products/{second_id}").status_code == 404
                     )
                     with httpx.Client(
-                        base_url=f"https://books.blissbiz.test:{port}",
+                        base_url=f"https://books.{domain}{port_suffix}",
                         verify=tls,
                         trust_env=False,
                     ) as books:
@@ -248,7 +338,7 @@ def main():
                 )
                 assert owner.post("/api/v1/auth/logout", headers=csrf()).status_code == 204
                 headers = csrf()
-                for attempt in range(4):
+                for attempt in range(login_limit - 1):
                     result = owner.post(
                         "/api/v1/auth/login",
                         headers={
@@ -268,7 +358,7 @@ def main():
                 with httpx.Client(verify=tls, trust_env=False) as public_client:
                     assert (
                         public_client.get(
-                            f"https://unknown.blissbiz.test:{port}/api/v1/storefront"
+                            f"https://unknown.{domain}{port_suffix}/api/v1/storefront"
                         ).status_code
                         == 404
                     )

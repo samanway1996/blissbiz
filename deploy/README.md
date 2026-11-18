@@ -1,5 +1,7 @@
 # Deployment preparation (B09)
 
+For the container deployment on Ubuntu 26.04 with the confirmed domain **blissbiz.biz**, follow [the VPS Compose guide](vps.md). It includes frontend builds, private database/backend networking, persistent volumes, and HTTPS testing before public DNS. The native-service instructions below remain an alternative.
+
 Prepared for one GoDaddy **Linux VPS** with Nginx, Python 3.11–3.13 and MySQL 8.4. Shared website hosting is not assumed to support this process layout. These files do not install services or deploy anything. Frontend business screens remain separate work.
 
 ## Production layout

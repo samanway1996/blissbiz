@@ -97,3 +97,11 @@ Root cause: Browser cookies are scoped by hostname/path, not TCP port.
 Fix: Run the fixture on f09.localhost / admin.f09.localhost / business.f09.localhost, with its own temporary databases/uploads and matching build-time frontend origins.
 Verification: Two-business browser review and built-app deep-link checks passed on isolated ports 8011/5180. Fixture teardown removed only temporary stores; normal servers on 8000/5173 remained running.
 Reuse hint: Follow the optional fixture commands in README; never weaken cookie domain/origin policy or point fixture persistence at a contributor’s database.
+
+## [2026-11-18] Test VPS host routing before changing public DNS
+Context: BlissBiz Docker deployment on Ubuntu 26.04 for blissbiz.biz.
+Signal: Need to verify admin/storefront behavior before attaching public DNS; a raw server IP cannot represent the configured business hosts.
+Root cause: Production configuration requires HTTPS origins and Secure host-only cookies; business resolution depends on Host and TLS uses the hostname too.
+Fix: Use the VPS Compose guide and a short-lived certificate covering root plus wildcard; curl with --cacert and --resolve preserves TLS/Host without changing DNS or weakening cookie checks. DNS-01 can issue a publicly trusted root/wildcard certificate before A records change. Keep DB and images in independent volumes and publish only Nginx.
+Verification: Project checks and isolated VPS Compose runtime passed secure auth, two-business isolation, asset serving, restart persistence and backup/restore. Frontend was built on host and packaged using the final Nginx stage because local registry downloads timed out; full frontend Docker builder step remains unverified.
+Reuse hint: Use deploy/vps.md and scripts/vps-compose.sh; never run the disposable test Compose or down --volumes on the real VPS. Hosts-file mapping alone does not establish certificate trust.
